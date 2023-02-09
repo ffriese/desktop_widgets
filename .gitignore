@@ -1,0 +1,11 @@
+.idea/*
+*/__pycache__/*
+*.ini
+*.log
+subwidgets/
+credentials.json
+*.pickle
+emojis/
+*__pychache__*
+*.pyc
+*.spec

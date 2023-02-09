@@ -1,0 +1,96 @@
+<html lang="en_US">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <script src="https://api.mqcdn.com/sdk/mapquest-js/v1.3.2/mapquest.js"></script>
+    <link type="text/css" rel="stylesheet" href="https://api.mqcdn.com/sdk/mapquest-js/v1.3.2/mapquest.css"/>
+
+    <script type="text/javascript">
+        let connectInfo = document.location.toString();
+        let citySet = connectInfo.match(/city=([^&]*)/);
+        let latSet = connectInfo.match(/lat=([^&]*)/);
+        let longSet = connectInfo.match(/long=([^&]*)/);
+        let apiKeySet = connectInfo.match(/apiKey=([^&]*)/);
+
+        let API_KEY;
+        if (apiKeySet !== null) {
+            API_KEY = decodeURI(apiKeySet[1]);
+        }
+        let city = "Hamburg";
+        let latitude = -34.397;
+        let longitude = 150.644;
+        if (citySet !== null) {
+            city = citySet[1];
+        }
+        if (latSet !== null) {
+            latitude = parseFloat(latSet[1]);
+        }
+        if (longSet !== null) {
+            longitude = parseFloat(longSet[1]);
+        }
+        let marker;
+        let map;
+        let searchField;
+        let currentLoc;
+
+        window.onload = function () {
+            L.mapquest.key = API_KEY;
+
+            currentLoc = [latitude, longitude]
+
+            map = L.mapquest.map('map', {
+                center: currentLoc,
+                layers: L.mapquest.tileLayer('light'), //map, hybrid, satellite, dark, light
+                zoom: 12
+            });
+
+            marker = L.marker(currentLoc, {
+                icon: L.mapquest.icons.flag({
+                    primaryColor: '#22407f',
+                    secondaryColor: '#3B5998',
+                    shadow: true,
+                    size: 'md',
+                    symbol: 'YOU'
+                }),
+                draggable: false
+            }).bindPopup('Select Weather Reports for this Location').addTo(map);
+
+            function updateLocation(lat, lng) {
+                currentLoc = [lat, lng]
+                console.log('__DATA_UPDATE__' + JSON.stringify(
+                    {
+                        'loc': {
+                            'lat': lat,
+                            'long': lng
+                        }
+                    }))
+                marker.setLatLng(currentLoc);
+            }
+
+            // ON MAP CLICK
+            map.on('click', function (e) {
+                let popLocation = e.latlng;
+                updateLocation(popLocation.lat, popLocation.lng)
+            });
+
+            L.mapquest.geocodingControl({
+                'searchAhead': false,
+                'placeMarker': false,
+                'position': 'topright',
+                'keepOpen': true
+            }).addTo(map).on('geocode_response', function (eventResponse) {
+                let loc = eventResponse.results[0].locations[0].latLng
+                updateLocation(loc.lat, loc.lng);
+                searchField.blur();
+            });
+            searchField = document.getElementsByClassName('search-ahead-form')[0].children[0].children[0].children[0];
+            searchField.select();
+
+        }
+    </script>
+  <title>Location Picker</title>
+</head>
+
+<body style="border: 0; margin: 0;">
+<div id="map" style="width: 100%; height: 100%;"></div>
+</body>
+</html>
