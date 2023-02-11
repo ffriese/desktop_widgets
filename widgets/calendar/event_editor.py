@@ -389,8 +389,8 @@ class EventEditor(CustomWindow):
             return
 
         event_title = self.summary.text()
-        if self.emoji_code is not None:
-            event_title = self.emoji_code + event_title
+        # if self.emoji_code is not None:
+        #     event_title = self.emoji_code + event_title
         if self.event is None:
             event = Event(event_id=None,
                           title=event_title,
