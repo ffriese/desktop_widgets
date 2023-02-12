@@ -57,3 +57,4 @@ The Music Widget watches the play status of a couple of supported Media-Players,
 The Network Widget shows you current connections of running processes.
 
  - #### Example Screenshot:
+   <img src="https://user-images.githubusercontent.com/28440404/218324468-39020369-c7f2-492d-9787-5a54b34adca1.png" width="600" />
