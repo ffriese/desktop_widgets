@@ -1,4 +1,4 @@
-# desktop_widgets: Cross-Platform Desktop Widgets
+# Desktop Widgets: Cross-Platform Desktop Widgets
 Tested On:
 - Windows
 - Ubuntu
@@ -40,14 +40,20 @@ It also features a weather chart in the background when connected to a weather p
 
 The Music Widget watches the play status of a couple of supported Media-Players, tries to read the ID3-Tags (SYLT or USLT) and displays the Lyrics.
 
-<img src="https://user-images.githubusercontent.com/28440404/218318837-b64bd861-0b01-4268-bf42-d01389398153.gif" width="600" />
+ - #### Example of synchronized lyrics read from SYLT-Tag:
+   <img src="https://user-images.githubusercontent.com/28440404/218318837-b64bd861-0b01-4268-bf42-d01389398153.gif" width="600" />
 
 
-### Supported Players:
- - Windows:
-   - Musicbee
- - Linux:
-   - Spotify Desktop
-   - Banshee
+ - #### Supported Players:
+   - Windows:
+     - Musicbee
+   - Linux:
+     - Spotify Desktop
+     - Banshee
    - (any DBus-compatible Player can be easily implemented)
    
+## Network Widget
+
+The Network Widget shows you current connections of running processes.
+
+ - #### Example Screenshot:
