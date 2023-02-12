@@ -36,3 +36,18 @@ It also features a weather chart in the background when connected to a weather p
  - #### Change Weather Location
    <img src="https://user-images.githubusercontent.com/28440404/218316097-f94c35c3-a703-44e9-82f0-c28c1c05ff4d.gif" width="600" />
 
+## Music Widget
+
+The Music Widget watches the play status of a couple of supported Media-Players, tries to read the ID3-Tags (SYLT or USLT) and displays the Lyrics.
+
+<img src="https://user-images.githubusercontent.com/28440404/218318837-b64bd861-0b01-4268-bf42-d01389398153.gif" width="600" />
+
+
+### Supported Players:
+ - Windows:
+   - Musicbee
+ - Linux:
+   - Spotify Desktop
+   - Banshee
+   - (any DBus-compatible Player can be easily implemented)
+   
