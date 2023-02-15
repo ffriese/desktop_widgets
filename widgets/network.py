@@ -71,14 +71,14 @@ class NetworkWidget(BaseWidget):
 
 
     def update_ip_to_hostname(self, ip, hostname):
-        print(f'GOT {ip}->{hostname}')
+        # print(f'GOT {ip}->{hostname}')
         try:
             proc_items = self.tree_wid.findItems(ip, QtCore.Qt.MatchContains | QtCore.Qt.MatchRecursive, 0)
             for proc_item in proc_items:
-                print('found proc item')
-                print(f'current text: {proc_item.text(0)}')
+                # print('found proc item')
+                # print(f'current text: {proc_item.text(0)}')
                 proc_item.setText(0, proc_item.text(0).replace(ip, hostname))
-                print(f'new text: {proc_item.text(0)}')
+                # print(f'new text: {proc_item.text(0)}')
         except Exception as e:
             print(e)
 
@@ -234,16 +234,17 @@ class NetworkWidget(BaseWidget):
                 proc_item = self.tree_wid.findItems(proc_name, QtCore.Qt.MatchExactly, 0)[0]
                 for proc in data[proc_name]:
                     text = self.proc_text(proc)
-                    self.debug('processing remove instruction: [%s] - %s' % (proc_name, text))
+                    self.log_info('processing remove instruction: [%s] - %s' % (proc_name, text))
                     for i in range(0, proc_item.childCount()):
-                        if proc_item.child(i).text(0) == text:
+                        item_data = proc_item.child(i).data(0,  QtCore.Qt.UserRole)[1]
+                        if item_data['remote_host'] == proc['remote_host']:
                             (proc_item.child(i).parent() or self.tree_wid.invisibleRootItem()).\
                                 removeChild(proc_item.child(i))
                             break
 
                 if proc_item.childCount() < 1:
                     (proc_item.parent() or self.tree_wid.invisibleRootItem()).removeChild(proc_item)
-                    self.debug('removed %s' % proc_item.text(0))
+                    self.log_info('removed %s' % proc_item.text(0))
             except:
                 pass
 
