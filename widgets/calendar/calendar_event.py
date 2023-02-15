@@ -182,7 +182,8 @@ class CalendarEventWidget(Widget):
                   f"{self.get_map_image_base_64(self.location)}</td></tr>" if self.location else ''
         desc_str = f"<tr><td>{self.get_icon_base_64(PathManager.get_icon_path('description.png'), 10, '<b>Description:</b>')} " \
                    f"</td><td>{self.description}</td></tr>" if self.description else ''
-
+        alarm_str = f"<tr><td>{self.get_icon_base_64(PathManager.get_icon_path('bell.png'), 10, '<b>Alarm:</b>')} " \
+                   f"</td><td>{self.event.alarm.alarm_time.strftime('%H:%M')}</td></tr>" if self.event.alarm else ''
         weather = ''
         if hasattr(self.parent().parent(), 'weather_data') and self.parent().parent().weather_data:
             weather_data: WeatherReport = self.parent().parent().weather_data
@@ -216,6 +217,7 @@ class CalendarEventWidget(Widget):
                         f'{time_str}'
                         f'{loc_str}'
                         f'{desc_str}'
+                        f'{alarm_str}'
                         f'{weather}'
                         f'<tr></tr></table>'
                         f"{self.get_icon_base_64(PathManager.get_icon_path('cal.png'), 10, '<i>Calendar:</i>')}"
@@ -419,6 +421,11 @@ class CalendarEventWidget(Widget):
             painter.drawText(QRect(0, 0, self.width(), self.height()), Qt.TextWordWrap, '       '+self.summary)
         else:
             painter.drawText(QRect(0, 0, self.width(), self.height()), Qt.TextWordWrap, self.summary)
+
+        if self.event.alarm:
+            bell = QIcon(PathManager.get_icon_path('bell.png'))
+            bell.paint(painter, QRect(self.width() - 17, 2, 15, 15))
+
         if not self.event.is_synchronized():
             nsync = QIcon(PathManager.get_icon_path('cloud-sync-icon.png'))
-            nsync.paint(painter, QRect(self.width()-17, 2, 15, 15))
+            nsync.paint(painter, QRect(self.height()-17, 2, 15, 15))

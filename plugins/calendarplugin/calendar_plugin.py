@@ -17,6 +17,13 @@ class CalendarAccessRole(Enum):
     FREE_BUSY_READER = 'FREE_BUSY_READER'
 
 
+class Alarm:
+    def __init__(self, alarm_time: datetime, trigger: str, description: str, action: str):
+        self.trigger = trigger
+        self.alarm_time = alarm_time
+        self.description = description
+        self.action = action
+
 class Calendar:
     def __init__(self, calendar_id: str, name: str, access_role: CalendarAccessRole,
                  fg_color: QColor,
@@ -52,7 +59,8 @@ class Event:
                  bg_color: QColor = None,
                  recurring_event_id: str = None,
                  recurrence: List[str] = None,
-                 synchronized: bool = True
+                 synchronized: bool = True,
+                 alarm: Alarm = None
                  ):
         self.id = event_id
         self.title = title
@@ -68,6 +76,7 @@ class Event:
         self.recurrence = recurrence
         self.fg_color = fg_color
         self.bg_color = bg_color
+        self.alarm = alarm
         self._synchronized = synchronized
 
     def get_fg_color(self):
@@ -100,6 +109,13 @@ class Event:
 
     def get_unique_instance_id(self):
         return f'{self.id}{f":{self.recurring_event_id}" if self.recurring_event_id else ""}'
+
+
+
+class EventInstance:
+    def __init__(self, event: Event, instance_id: str = None):
+        self.event = event
+        self.instance_id = instance_id
 
 
 class Todo:

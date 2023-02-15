@@ -18,7 +18,7 @@ from requests.exceptions import SSLError
 
 from credentials import CalDAVCredentials, CredentialsNotValidException, CredentialType
 from plugins.calendarplugin.calendar_plugin import CalendarPlugin, Event, Calendar, CalendarData, CalendarAccessRole, \
-    Todo
+    Todo, Alarm
 import caldav
 import icalendar
 
@@ -275,7 +275,7 @@ class CalDavPlugin(CalendarPlugin):
                 action = alarm.action.value
                 desc = alarm.description.value
                 alarmtime = due.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode())) + trigger
-                self.log(f'{trigger}, {alarmtime} {action}, {desc}')
+                self.log(f'TODO-ALARM: {trigger}, {alarmtime} {action}, {desc}')
         else:
             due = None
 
@@ -307,14 +307,16 @@ class CalDavPlugin(CalendarPlugin):
                                                                                datetime.datetime.min.time())
         end = ev.dtend.value if not all_day else datetime.datetime.combine(ev.dtend.value,
                                                                            datetime.datetime.min.time())
-        if 'valarm' in ev.contents:
-            alarm = ev.valarm
-            trigger = alarm.trigger.value
-            action = alarm.action.value
-            desc = alarm.description.value
-            alarmtime = start.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode())) + trigger
 
-            self.log(f'{trigger}, {alarmtime} {action}, {desc}')
+        alarm = None
+        if 'valarm' in ev.contents:
+            valarm = ev.valarm
+            trigger = valarm.trigger.value
+            action = valarm.action.value
+            desc = valarm.description.value
+            alarmtime = start.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode())) + trigger
+            alarm = Alarm(alarmtime, trigger, desc, action)
+            # self.log(f'{trigger}, {alarmtime} {action}, {desc}')
 
         recurrence = None
         if recurrence_id is not None:
@@ -333,7 +335,8 @@ class CalDavPlugin(CalendarPlugin):
                      timezone=None,
                      recurring_event_id=recurrence_id,
                      recurrence=recurrence,
-                     synchronized=True
+                     synchronized=True,
+                     alarm=alarm
                      )
 
     @staticmethod
