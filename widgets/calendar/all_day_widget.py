@@ -108,7 +108,7 @@ class AllDayWidget(TimelineWidget):
         painter = QPainter(self)
         for d in range(0, self.days):
             painter.setFont(QFont('Calibri',
-                                  min(self.bg_widgets[d].width() / 7, 20)
+                                  min(self.bg_widgets[d].width() / 8, 16)
                                   )
                             )
             day = (self.start_date + timedelta(days=d))
@@ -122,4 +122,4 @@ class AllDayWidget(TimelineWidget):
                 self.bg_widgets[d].geometry().x(),
                 0,  # TODO:REMOVE MAGIC NUMBER
                 self.bg_widgets[d].geometry().width(),
-                20), Qt.AlignCenter, day.strftime('%a, %d.%m.'))  # TODO:REMOVE MAGIC NUMBER
+                min(self.bg_widgets[d].geometry().height(), 20)), Qt.AlignCenter, day.strftime('%a, %d.%m.'))  # TODO:REMOVE MAGIC NUMBER

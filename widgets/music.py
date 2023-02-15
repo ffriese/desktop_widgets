@@ -84,10 +84,10 @@ class MusicWidget(BaseWidget):
         self.time_template = "<span style='font-size:8pt; font-weight:500; color:white;'>%02.0f:%02.0f</span>"
         self.elapsed_lb = QLabel(self.time_template % (0.0, 0.0))
         self.duration_lb = QLabel(self.time_template % (0.0, 0.0))
-        self.elapsed_lb.setMaximumWidth(32)  # TODO: CONFIGURABLE OR CALCULATE FROM TEXT-SIZE
-        self.elapsed_lb.setMinimumWidth(32)  # TODO: CONFIGURABLE OR CALCULATE FROM TEXT-SIZE
-        self.duration_lb.setMaximumWidth(32)  # TODO: CONFIGURABLE OR CALCULATE FROM TEXT-SIZE
-        self.duration_lb.setMinimumWidth(32)  # TODO: CONFIGURABLE OR CALCULATE FROM TEXT-SIZE
+        self.elapsed_lb.setMaximumWidth(38)  # TODO: CONFIGURABLE OR CALCULATE FROM TEXT-SIZE
+        self.elapsed_lb.setMinimumWidth(38)  # TODO: CONFIGURABLE OR CALCULATE FROM TEXT-SIZE
+        self.duration_lb.setMaximumWidth(38)  # TODO: CONFIGURABLE OR CALCULATE FROM TEXT-SIZE
+        self.duration_lb.setMinimumWidth(38)  # TODO: CONFIGURABLE OR CALCULATE FROM TEXT-SIZE
         self.progress_layout.addWidget(self.elapsed_lb)
         self.progress_layout.addWidget(self.progressbar)
         self.progress_layout.addWidget(self.duration_lb)
@@ -147,7 +147,7 @@ class MusicWidget(BaseWidget):
         self.load_player()
 
     def load_player(self):
-        player_plugin_class = getattr(importlib.import_module('plugins.%s' % self.player.lower()),
+        player_plugin_class = getattr(importlib.import_module('plugins.music.%s' % self.player.lower()),
                                       '%sPlugin' % self.player)
         self.register_plugin(player_plugin_class, 'player_plugin')
 
