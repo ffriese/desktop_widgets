@@ -341,7 +341,10 @@ class MultiDayView(Widget):
                             viz.complete_path(painter, self.day_widgets[offset-1].geometry())
                     y = get_y(time)
                     for weather_data_type, viz in visualizations.items():
-                        viz.add_data_point(single_report.data[weather_data_type], self.day_widgets[offset].geometry(), y)
+                        if weather_data_type in single_report.data:
+                            viz.add_data_point(single_report.data[weather_data_type], self.day_widgets[offset].geometry(), y)
+                        else:
+                            self.log_warn(f'{weather_data_type} not found in {single_report.data}')
         # draw last day
         for weather_data_type, viz in visualizations.items():
             viz.complete_path(painter, self.day_widgets[offset].geometry())
