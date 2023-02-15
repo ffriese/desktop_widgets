@@ -206,7 +206,7 @@ class CalDavPlugin(CalendarPlugin):
         # now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
         print('SEARCHING FOR ', start_time, end_time)
         event_result = self._calendars[calendar.id].date_search(start=start_time,
-                                                                end=end_time)
+                                                                end=end_time, expand=False)
         events = []
         for ev in event_result:
             events.extend(self._events_from_vevent(ev, calendar, days_in_future, days_in_past))
