@@ -1,7 +1,7 @@
 import logging
 import pickle
 
-from widgets.helper import PathManager
+from helpers.tools import PathManager
 
 
 class SettingsStorage:

@@ -1,14 +1,15 @@
 
-from PyQt5.QtCore import QSize, Qt
-from PyQt5.QtGui import QFont, QResizeEvent, QIcon, QPixmap, QImage
+from PyQt5.QtCore import QSize
+from PyQt5.QtGui import QFont, QResizeEvent, QIcon
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QGridLayout
 
+from helpers.tools import PathManager
 from plugins.weather.iconsets import IconSet
 from plugins.weather.weather_data_types import WeatherDescription, WeatherCode, Temperature
 from plugins.weather.weather_plugin import WeatherReport
-from widgets.helper import PathManager, TextLabel
+from helpers.widget_helpers import TextLabel
 from widgets.tool_widgets.widget import Widget
-from widgets.viz_helper import TemperatureGradient
+from helpers.viz_helper import TemperatureGradient
 
 
 class DailyWeatherWidget(Widget):

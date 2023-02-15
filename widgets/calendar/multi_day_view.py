@@ -16,7 +16,7 @@ from widgets.calendar.calendar_event import CalendarEventWidget
 from widgets.calendar.daily_weather_widget import DailyWeatherWidget
 from widgets.calendar.day_widget import DayWidget
 from widgets.tool_widgets.widget import Widget
-from widgets.viz_helper import PrecipitationVisualization, TemperatureVisualization
+from helpers.viz_helper import PrecipitationVisualization, TemperatureVisualization
 
 
 class MultiDayView(Widget):

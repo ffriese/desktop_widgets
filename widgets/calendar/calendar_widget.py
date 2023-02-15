@@ -22,7 +22,7 @@ from PyQt5.QtWidgets import QHBoxLayout, QAction, QMessageBox, QLabel, QMenu, QA
 from widgets.calendar.calendar_event import CalendarEventWidget
 from widgets.calendar.event_editor import EventEditor
 from widgets.calendar.multi_day_view import MultiDayView
-from widgets.helper import PathManager
+from helpers.tools import PathManager
 from widgets.tool_widgets import LocationPicker, QSpinBoxAction, ListSelectAction, CustomMessageBox
 from widgets.tool_widgets.widget_actions import QHourRangeAction
 

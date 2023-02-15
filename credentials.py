@@ -10,7 +10,7 @@ from googleapiclient import discovery
 from oauth2client import client, tools
 from oauth2client.file import Storage
 
-from widgets.helper import PathManager
+from helpers.tools import PathManager
 
 
 class CredentialType(Enum):

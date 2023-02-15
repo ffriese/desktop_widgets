@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import QMessageBox, QAbstractButton, QDialogButtonBox, QDia
     QToolButton, QLabel, QStyle, QSizePolicy, QLayout
 
 from helpers import styles
-from widgets.helper import PathManager
+from helpers.tools import PathManager
 from widgets.tool_widgets.widget import Widget
 
 

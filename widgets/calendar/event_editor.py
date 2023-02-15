@@ -9,9 +9,9 @@ from PyQt5.QtWidgets import QWidget, QFormLayout, QLineEdit, QPushButton, QHBoxL
 from dateutil.rrule import rrulestr
 
 from helpers import styles
+from helpers.tools import PathManager
 from plugins.calendarplugin.calendar_plugin import Event, Calendar, CalendarAccessRole
 from widgets.base import BaseWidget
-from widgets.helper import PathManager
 from widgets.tool_widgets import FilteringComboBox
 from widgets.tool_widgets.dialogs.custom_dialog import CustomWindow
 

@@ -3,7 +3,7 @@ from typing import List, Dict
 
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QResizeEvent
-from PyQt5.QtWidgets import QWidget, QApplication
+from PyQt5.QtWidgets import QApplication
 
 from plugins.calendarplugin.calendar_plugin import Event
 from widgets.calendar.calendar_event import CalendarEventWidget
@@ -11,7 +11,7 @@ from widgets.tool_widgets.widget import Widget
 
 
 class TimelineWidget(Widget):
-    event_removed = pyqtSignal(str, object)  # id, Event
+    event_removed = pyqtSignal(str, Event)  # id, Event
     event_edit_request = pyqtSignal(CalendarEventWidget)
     event_delete_request = pyqtSignal(CalendarEventWidget)
 

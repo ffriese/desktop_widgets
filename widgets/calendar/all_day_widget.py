@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import QWidget, QHBoxLayout
 from plugins.calendarplugin.calendar_plugin import Event
 from widgets.calendar.calendar_event import CalendarEventWidget
 from widgets.calendar.timeline_widget import TimelineWidget
-from widgets.helper import CalendarHelper
+from helpers.widget_helpers import CalendarHelper
 
 
 class AllDayWidget(TimelineWidget):

@@ -2,7 +2,7 @@ from PyQt5.QtCore import QRect, QPointF, Qt
 from PyQt5.QtGui import QPainterPath, QPainter, QBrush, QLinearGradient, QPen, QColor
 
 from plugins.weather.weather_data_types import WeatherDataType, Precipitation, Temperature, PrecipitationType
-from widgets.helper import SmoothPath
+from helpers.widget_helpers import SmoothPath
 
 
 class ValueVisualization:

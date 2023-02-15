@@ -1,20 +1,18 @@
-import logging
 import math
-import os.path
 import re
 import webbrowser
 from datetime import datetime, date, timedelta
 
 from PyQt5.QtCore import pyqtSignal, Qt, QRect
 from PyQt5.QtGui import QIcon, QPainter, QPen, QFont, QResizeEvent
-from PyQt5.QtWidgets import QWidget, QMenu, QAction, QStyle, QGraphicsDropShadowEffect, QLabel, QVBoxLayout
+from PyQt5.QtWidgets import QWidget, QMenu, QAction, QGraphicsDropShadowEffect, QLabel, QVBoxLayout
 
-from helpers.helpers import ImageTools
+from helpers.tools import ImageTools, PathManager
 from plugins.calendarplugin.calendar_plugin import Event, CalendarAccessRole
 from plugins.weather.iconsets import IconSet
 from plugins.weather.weather_data_types import Temperature, WeatherDescription, Wind
 from plugins.weather.weather_plugin import WeatherReport
-from widgets.helper import SideGrip, PathManager
+from helpers.widget_helpers import SideGrip
 #from widgets.tool_widgets import EmojiPicker
 from widgets.tool_widgets.widget import Widget
 

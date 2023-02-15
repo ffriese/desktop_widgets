@@ -13,9 +13,10 @@ from termcolor import colored
 
 from credentials import NoCredentialsSetException, CredentialsNotValidException, CredentialType
 from helpers import styles
+from helpers.tools import PathManager
 from helpers.settings_storage import SettingsStorage
 from plugins.base import BasePlugin, APIDeprecatedException, APILimitExceededException
-from widgets.helper import PathManager, ResizeHelper
+from helpers.widget_helpers import ResizeHelper
 
 
 class BaseWidget(QWidget, object):

@@ -7,7 +7,7 @@ import math
 from mutagen.id3 import ID3, SYLT
 import importlib
 
-from widgets.helper import PathManager
+from helpers.tools import PathManager
 
 
 class MusicWidget(BaseWidget):

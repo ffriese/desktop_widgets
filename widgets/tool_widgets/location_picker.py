@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import QPushButton, QVBoxLayout
 
 from helpers import styles
 from widgets.base import BaseWidget
-from widgets.helper import PathManager
+from helpers.tools import PathManager
 from widgets.tool_widgets.dialogs.custom_dialog import CustomWindow
 
 

@@ -6,7 +6,7 @@ from typing import Union
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
-from helpers.helpers import SignalingThread
+from helpers.tools import SignalingThread
 from termcolor import colored
 
 

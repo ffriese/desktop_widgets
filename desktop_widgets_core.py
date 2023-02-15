@@ -18,10 +18,10 @@ from typing import List, Type, Dict, cast, Union
 
 import signal
 
-from helpers.helpers import tup2str
+from helpers.tools import tup2str
 from widgets.base import BaseWidget
 from widgets.calendar.calendar_widget import CalendarWidget
-from widgets.helper import PathManager
+from helpers.tools import PathManager
 from widgets.music import MusicWidget
 from widgets.network import NetworkWidget
 import logging

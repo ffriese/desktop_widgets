@@ -1,14 +1,10 @@
-import logging
 import math
-import os
-from pathlib import Path
-from typing import Union
 
 from PyQt5.QtCore import QPointF, Qt, pyqtSignal, QRect, QPoint, QRectF
 from PyQt5.QtGui import QPainterPath, QPainter, QFont, QFontMetrics, QBrush, QTextOption, QColor, QPaintEvent
 from PyQt5.QtWidgets import QWidget, QSizePolicy
 
-from helpers.helpers import LRUCache
+from helpers.tools import LRUCache
 
 
 class ResizeHelper:
@@ -39,67 +35,6 @@ class ResizeHelper:
             }
         }
         return sections[horizontal(geom, point)][vertical(geom, point)]
-
-
-class PathManager:
-    __BASE_PATH__ = None  # initially set by main function
-
-    @staticmethod
-    def _combine_path(args, filename=None):
-        if filename is not None:
-            args.append(filename)
-        return os.path.join(*args)
-
-    @staticmethod
-    def get_project_base_path(filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__], filename)
-
-    @staticmethod
-    def get_new_emoji_data_path(filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'emojis_new'], filename)
-
-    @staticmethod
-    def get_new_emoji_path(filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'emojis_new', 'ios_emojis'], filename)
-
-    @staticmethod
-    def get_image_path(filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'images'], filename)
-
-    @staticmethod
-    def get_icon_path(filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'icons'], filename)
-
-    @staticmethod
-    def get_emoji_path(filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'emojis'], filename)
-
-    @staticmethod
-    def get_calendar_default_icons_path(filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'default_calendar_icons'], filename)
-
-    @staticmethod
-    def get_weather_icon_set_path(icon_set_name: str, filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'weather_icons', icon_set_name],
-                                         filename)
-
-    @staticmethod
-    def get_html_path(filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'html'], filename)
-
-    @staticmethod
-    def join_path(*args):
-        return PathManager._combine_path([PathManager.__BASE_PATH__,  *args])
-
-    @staticmethod
-    def make_path(path: Union[str, Path]):
-        try:
-            if isinstance(path, Path):
-                path.mkdir()
-            else:
-                Path(PathManager.join_path(path)).mkdir()
-        except FileExistsError:
-            pass
 
 
 ##################################################
