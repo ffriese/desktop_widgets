@@ -81,6 +81,21 @@ def tup2str(tup: Union[QPoint, QSize]):
         return f"{tup.width()}x{tup.height()}"
 
 
+def get_ordinal(number: int):
+    num_str = str(number)
+    last_digit = num_str[-1]
+    # 1st, 31st, 121st, ... BUT: 11th, 311th, 7411th, ...
+    if last_digit == '1' and (len(num_str) < 2 or num_str[-2] != '1'):
+        suffix = 'st'
+    elif last_digit == '2' and (len(num_str) < 2 or num_str[-2] != '1'):
+        suffix = 'nd'
+    elif last_digit == '3' and (len(num_str) < 2 or num_str[-2] != '1'):
+        suffix = 'rd'
+    else:
+        suffix = 'th'
+    return f'{number}{suffix}'
+
+
 # https://stackoverflow.com/a/44549081
 # author: Ian Chen
 from collections import OrderedDict

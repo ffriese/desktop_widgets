@@ -14,6 +14,7 @@ from plugins.calendarplugin.calendar_plugin import Event, Calendar, CalendarAcce
 from widgets.base import BaseWidget
 from widgets.tool_widgets import FilteringComboBox
 from widgets.tool_widgets.dialogs.custom_dialog import CustomWindow
+from widgets.tool_widgets.recurrence_selector import RecurrenceSelector
 
 
 class EventEditor(CustomWindow):
@@ -129,56 +130,8 @@ class EventEditor(CustomWindow):
         self.recurring = QCheckBox()
         self.recurring.stateChanged.connect(self.recurring_changed)
 
-        self.recurring_widget = QWidget()
-        self.rec_lay = QFormLayout()
+        self.recurring_widget = RecurrenceSelector()
 
-        self.freq_cb = ["Year(s)", "Month(s)", "Week(s)", "Day(s)"]  # , "Hour(s)", "Minute(s)", "Second(s)"]
-        self._freq_list = ["YEARLY", "MONTHLY", "WEEKLY", "DAILY"]  # , "HOURLY", "MINUTELY", "SECONDLY"]
-
-        self.repeat_layout = QHBoxLayout()
-        self.repeat_interval = QSpinBox()
-        self.repeat_interval.setMinimum(1)
-        self.repeat_interval_unit = QComboBox()
-        self.repeat_interval_unit.addItems(self.freq_cb)
-        self.repeat_interval_unit.setCurrentText('Week(s)')
-        self.repeat_interval_unit.currentTextChanged.connect(self.recurrence_interval_unit_changed)
-        self.repeat_layout.addWidget(self.repeat_interval)
-        self.repeat_layout.addWidget(self.repeat_interval_unit)
-
-        self.detailed_repeat_layout = QHBoxLayout()
-        self.detailed_repeat_day = QComboBox()
-        self.detailed_repeat_type = QComboBox()
-        self.detailed_repeat_type.addItems(['Every', 'On the', 'On day(s)'])
-        self.detailed_repeat_type.currentTextChanged.connect(self.detailed_repeat_type_changed)
-        self.detailed_repeat_rhythm = QComboBox()
-        self.detailed_repeat_rhythm.addItems(['1st', '2nd', '3rd', '4th', '5th', 'Last'])
-        self.detailed_repeat_rhythm.setVisible(False)
-        self.detailed_repeat_day.addItems(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
-        self.detailed_repeat_layout.addWidget(self.detailed_repeat_type)
-        self.detailed_repeat_layout.addWidget(self.detailed_repeat_rhythm)
-        self.detailed_repeat_layout.addWidget(self.detailed_repeat_day)
-
-        self.end_repeat_layout = QHBoxLayout()
-        self.end_repeat = QComboBox()
-        self.end_repeat.addItems(['Never', 'On', 'After'])
-        self.end_repeat.currentTextChanged.connect(self.end_repeat_changed)
-        self.end_repeat_date = QDateTimeEdit()
-        self.end_repeat_date.hide()
-        self.end_repeat_occurrences = QSpinBox()
-        self.end_repeat_occurrences.setMinimum(2)
-        self.end_repeat_occurrences.setSingleStep(1)
-        self.end_repeat_occurrences.hide()
-        self.end_repeat_occurrences_lb = QLabel('Occurrences')
-        self.end_repeat_occurrences_lb.hide()
-        self.end_repeat_layout.addWidget(self.end_repeat)
-        self.end_repeat_layout.addWidget(self.end_repeat_date)
-        self.end_repeat_layout.addWidget(self.end_repeat_occurrences)
-        self.end_repeat_layout.addWidget(self.end_repeat_occurrences_lb)
-
-        self.rec_lay.addRow("Every", self.repeat_layout)
-        self.rec_lay.addRow('', self.detailed_repeat_layout)
-        self.rec_lay.addRow("End", self.end_repeat_layout)
-        self.recurring_widget.setLayout(self.rec_lay)
 
         ###
         #   EVENT DESCRIPTION
@@ -237,42 +190,6 @@ class EventEditor(CustomWindow):
         if isinstance(widget, QWidget):
             widget.setVisible(enabled)
 
-    def end_repeat_changed(self, text):
-        if text == 'Never':
-            self.end_repeat_date.hide()
-            self.end_repeat_occurrences.hide()
-            self.end_repeat_occurrences_lb.hide()
-        elif text == 'After':
-            self.end_repeat_date.hide()
-            self.end_repeat_occurrences.show()
-            self.end_repeat_occurrences_lb.show()
-        else:
-            self.end_repeat_date.show()
-            self.end_repeat_occurrences.hide()
-            self.end_repeat_occurrences_lb.hide()
-
-    def detailed_repeat_type_changed(self, text):
-        if text == 'Every':
-            self.detailed_repeat_rhythm.hide()
-            self.detailed_repeat_day.show()
-        elif text == 'On the':
-            self.detailed_repeat_rhythm.show()
-            self.detailed_repeat_day.show()
-        elif text == 'On day(s)':
-            self.detailed_repeat_rhythm.hide()
-            self.detailed_repeat_day.hide()
-
-    def recurrence_interval_unit_changed(self, text):
-        if text == 'Month(s)':
-            self.rec_lay.insertRow(self.rec_lay.getLayoutPosition(self.repeat_layout)[0]+1, "",
-                                   self.detailed_repeat_layout)
-            for i in range(self.detailed_repeat_layout.count()):
-                self.detailed_repeat_layout.itemAt(i).widget().show()
-        else:
-            if self.rec_lay.getLayoutPosition(self.detailed_repeat_layout)[0] == 1:
-                self.rec_lay.takeRow(self.rec_lay.getLayoutPosition(self.repeat_layout)[0] + 1)
-                for i in range(self.detailed_repeat_layout.count()):
-                    self.detailed_repeat_layout.itemAt(i).widget().hide()
 
     def set_time(self, start, end):
         self.blockSignals(True)
@@ -294,33 +211,7 @@ class EventEditor(CustomWindow):
         self.event = event
         if self.event.recurrence is not None:
             self.recurring.setChecked(True)
-            if isinstance(self.event.recurrence, dateutil.rrule.rrule):
-                rule = self.event.recurrence.__dict__
-            else:
-                recurrence = self.event.recurrence
-                rec_interval = recurrence[0]
-                # print('event is recurring and editable:')
-                rule = rrulestr(rec_interval).__dict__
-            # print(recurrence)
-            # print(rrulestr(rec_interval))
-            # print(rule)
-
-            _interval = rule['_interval']
-            _freq = self.freq_cb[int(rule['_freq'])]
-            _count = rule['_count']
-            _until = rule['_until']
-
-            if _count is None:
-                # print(_until)
-                if isinstance(_until, datetime):
-                    self.end_repeat.setCurrentText('On')
-                    self.end_repeat_date.setDateTime(_until)
-            else:
-                self.end_repeat.setCurrentText('After')
-                self.end_repeat_occurrences.setValue(_count)
-
-            self.repeat_interval.setValue(_interval)
-            self.repeat_interval_unit.setCurrentText(_freq)
+            self.recurring_widget.set_recurrence(self.event.recurrence)
 
         else:
             if self.event.is_recurring():
@@ -417,32 +308,13 @@ class EventEditor(CustomWindow):
             event.bg_color = self.get_bg_color()
             event.recurrence = self.get_recurrence()
 
+        # print( 'EVENT ACCEPT CURRENTLY DISABLED!!!!')
         self.accepted.emit(event)
         self.close()
 
     def get_recurrence(self):
         if self.recurring.isChecked():
-            freq = self.freq_cb.index(self.repeat_interval_unit.currentText())
-            interval = self.repeat_interval.value()
-            if self.end_repeat.currentText() == 'On':
-                count = None
-                until = self.end_repeat_date.dateTime().toPyDateTime()
-            elif self.end_repeat.currentText() == 'After':
-                count = self.end_repeat_occurrences.value()
-                until = None
-            else:
-                count = None
-                until = None
-
-            rule = dateutil.rrule.rrule(freq, dtstart=None,
-                                        interval=interval, wkst=None, count=count, until=until, bysetpos=None,
-                                        bymonth=None, bymonthday=None, byyearday=None, byeaster=None,
-                                        byweekno=None, byweekday=None,
-                                        byhour=None, byminute=None, bysecond=None,
-                                        cache=False)
-
-            print(rule)
-            return rule
+            return self.recurring_widget.get_rrule()
         return None
 
     def closeEvent(self, ev: QCloseEvent) -> None:
