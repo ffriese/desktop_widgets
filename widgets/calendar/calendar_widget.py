@@ -475,12 +475,15 @@ class CalendarWidget(BaseWidget):
             cached_edits.append({'new_data': updated_event, 'old_calendar': old_calendar})
             self.__data__['event_cache'] = self.event_cache
             self._save_data()
-            requesting_widget.log_debug(self.event_cache)
         if requesting_widget:
-            print(requesting_widget)
-            requesting_widget.delete_signal.emit(requesting_widget.event.id, updated_event)
+            try:
+                requesting_widget.log_debug(self.event_cache)
+                requesting_widget.delete_signal.emit(requesting_widget.event.id, updated_event)
+            except RuntimeError as e:
+                self.log_error(f'CRITICAL ERROR: {e}')
+
         else:
-            print('WTF THIS SHOULD NEVER HAVE HAPPENED')
+            self.log_warn('THE REQUESTING WIDGET HAS BEEN DELETED. THIS SHOULD NEVER HAVE HAPPENED')
 
     def show_event_editor(self, requesting_widget: CalendarEventWidget):
         if requesting_widget.recurring:
