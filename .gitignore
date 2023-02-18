@@ -2,6 +2,7 @@
 */__pycache__/*
 *.ini
 *.log
+*.log.*
 subwidgets/
 credentials.json
 *.pickle
@@ -9,3 +10,4 @@ emojis/
 *__pychache__*
 *.pyc
 *.spec
+*.pyo
