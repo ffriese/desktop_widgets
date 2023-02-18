@@ -149,14 +149,6 @@ class PathManager:
         return PathManager._combine_path([PathManager.__BASE_PATH__], filename)
 
     @staticmethod
-    def get_new_emoji_data_path(filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'emojis_new'], filename)
-
-    @staticmethod
-    def get_new_emoji_path(filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'emojis_new', 'ios_emojis'], filename)
-
-    @staticmethod
     def get_image_path(filename=None):
         return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'images'], filename)
 
@@ -167,6 +159,10 @@ class PathManager:
     @staticmethod
     def get_emoji_path(filename=None):
         return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'emojis'], filename)
+
+    @staticmethod
+    def get_emoji_category_path(filename=None):
+        return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'emojis', 'categories'], filename)
 
     @staticmethod
     def get_calendar_default_icons_path(filename=None):

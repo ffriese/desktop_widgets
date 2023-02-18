@@ -12,7 +12,7 @@ from helpers import styles
 from helpers.tools import PathManager
 from plugins.calendarplugin.calendar_plugin import Event, Calendar, CalendarAccessRole
 from widgets.base import BaseWidget
-from widgets.tool_widgets import FilteringComboBox
+from widgets.tool_widgets import FilteringComboBox, EmojiPicker
 from widgets.tool_widgets.dialogs.custom_dialog import CustomWindow
 from widgets.tool_widgets.recurrence_selector import RecurrenceSelector
 
@@ -37,13 +37,12 @@ class EventEditor(CustomWindow):
         #   EVENT TITLE
         ###
         self.summary = QLineEdit()
-        # self.icon_button = QPushButton('')
-        # self.icon_button.clicked.connect(self.pick_emoji)
-        # self.icon_button.setStyleSheet('QPushButton{min-width:20px;}')
-        # self.emoji_code = None
-        # self.emoji_file_name = None
+        self.icon_button = QPushButton('')
+        self.icon_button.clicked.connect(self.pick_emoji)
+        self.icon_button.setStyleSheet('QPushButton{min-width:26px;min-height:26px}')
+        self.emoji_code = None
         self.summary_layout = QHBoxLayout()
-        # self.summary_layout.addWidget(self.icon_button)
+        self.summary_layout.addWidget(self.icon_button)
         self.summary_layout.addWidget(self.summary)
 
         ###
@@ -221,12 +220,11 @@ class EventEditor(CustomWindow):
 
         # TODO: REUSE EMOJI PICKER
         self.summary.setText(self.event.title)
-        # icon, summary = EmojiPicker.split_summary(self.event.title)
-        # self.summary.setText(summary)
-        # self.emoji_code = icon
-        # if icon is not None:
-        #     self.emoji_file_name = EmojiPicker.emoji_to_filename(icon)
-        #     self.icon_button.setIcon(QIcon(PathManager.get_new_emoji_path(f'{self.emoji_file_name}.png')))
+        icon, summary = EmojiPicker.split_summary(self.event.title)
+        self.summary.setText(summary)
+        self.emoji_code = icon
+        if icon is not None:
+            self.icon_button.setIcon(EmojiPicker.get_emoji_icon_from_unicode(icon, 32))
 
         self.start_time.setDateTime(self.event.start)
         self.end_time.setDateTime(self.event.end)
@@ -280,8 +278,8 @@ class EventEditor(CustomWindow):
             return
 
         event_title = self.summary.text()
-        # if self.emoji_code is not None:
-        #     event_title = self.emoji_code + event_title
+        if self.emoji_code is not None:
+            event_title = self.emoji_code + event_title
         if self.event is None:
             event = Event(event_id=None,
                           title=event_title,
@@ -321,12 +319,13 @@ class EventEditor(CustomWindow):
         super().closeEvent(ev)
         self.closed.emit()
 
-    # def pick_emoji(self):
-    #     if self.emoji_picker is None:
-    #         def set_emoji(emoji, code):
-    #             self.icon_button.setIcon(emoji)
-    #             self.emoji_code = code
-    #         self.emoji_picker = EmojiPicker(self)
-    #         self.emoji_picker.emoji_picked.connect(set_emoji)
-    #     self.emoji_picker.update_recent()
-    #     self.emoji_picker.show()
+    def update_emoji(self, emoji, code):
+        self.icon_button.setIcon(emoji)
+        self.emoji_code = code
+
+    def pick_emoji(self):
+        if self.emoji_picker is None:
+            self.emoji_picker = EmojiPicker(self)
+            self.emoji_picker.emoji_picked.connect(self.update_emoji)
+        self.emoji_picker.update_recent()
+        self.emoji_picker.show()
