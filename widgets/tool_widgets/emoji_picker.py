@@ -21,9 +21,8 @@ from widgets.tool_widgets.dialogs.custom_dialog import CustomWindow
 class EmojiPicker(CustomWindow):
     _RECENT = '_recent_emojis'
     _EMOJI_SKIN_COLOR = '_emoji_skin_color'
-    _recently_used_emojis = defaultdict(lambda: {'count': 0, 'last_access': datetime.now().date()},
-                                        SettingsStorage.load_or_default(_RECENT, {}))
-    _current_emoji_skin_color = SettingsStorage.load_or_default(_EMOJI_SKIN_COLOR, None)
+    _recently_used_emojis = defaultdict(lambda: {'count': 0, 'last_access': datetime.now().date()}, {})
+    _current_emoji_skin_color = None
     CATEGORIES = {
         'Recent': '🕗',
         'Activities': '⚽',
@@ -44,6 +43,10 @@ class EmojiPicker(CustomWindow):
         self.setWindowTitle('Pick Icon')
         self.setWindowIcon(self.get_emoji_icon_from_unicode('🐨', 32))
         self.setStyleSheet(styles.get_style('darkblue'))
+        self.__class__._recently_used_emojis = defaultdict(lambda: {'count': 0, 'last_access': datetime.now().date()},
+                                                           SettingsStorage.load_or_default(self._RECENT, {}))
+        self.__class__._current_emoji_skin_color = SettingsStorage.load_or_default(self._EMOJI_SKIN_COLOR, None)
+
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(2, 2, 2, 2)
         self.tabWidget = QTabWidget(self)
