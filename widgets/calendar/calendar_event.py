@@ -1,3 +1,4 @@
+import logging
 import math
 import re
 import webbrowser
@@ -13,7 +14,7 @@ from plugins.weather.iconsets import IconSet
 from plugins.weather.weather_data_types import Temperature, WeatherDescription, Wind
 from plugins.weather.weather_plugin import WeatherReport
 from helpers.widget_helpers import SideGrip
-#from widgets.tool_widgets import EmojiPicker
+from widgets.tool_widgets import EmojiPicker
 from widgets.tool_widgets.widget import Widget
 
 
@@ -45,7 +46,7 @@ class CalendarEventWidget(Widget):
 
     @classmethod
     def get_map_image_base_64(cls, location_string):
-        return ""
+        # return ""
         if location_string in cls.__MAP_IMAGES__:
             return cls.__MAP_IMAGES__[location_string]
 
@@ -54,22 +55,21 @@ class CalendarEventWidget(Widget):
 
         from credentials import MapQuestCredentials
         response = requests.get(f"https://www.mapquestapi.com/staticmap/v5/map?key"
-                      f"={MapQuestCredentials.get_api_key()}&center={location_string}&size=170,170", stream=True)
-        # print(response.text)
-        # if response.status_code == 200:
-        #     with open('BOSTON.jpeg', 'wb') as f:
-        #         for chunk in response.iter_content(1024):
-        #             f.write(chunk)
+                      f"={MapQuestCredentials.get_api_key()}&center={location_string}&size=250,250", stream=True)
+        if response.status_code == 200:
 
-        import base64
+            import base64
 
-        uri = ("data:" +
-               response.headers['Content-Type'] + ";" +
-               "base64," + base64.b64encode(response.content).decode("utf-8"))
+            uri = ("data:" +
+                   response.headers['Content-Type'] + ";" +
+                   "base64," + base64.b64encode(response.content).decode("utf-8"))
 
-        cls.__MAP_IMAGES__[location_string] = f"<img src='{uri}'>"
+            cls.__MAP_IMAGES__[location_string] = f"<img src='{uri}'>"
+
+        else:
+            cls.__MAP_IMAGES__[location_string] = ""
+
         return cls.__MAP_IMAGES__[location_string]
-
 
 
     def __init__(self, parent, event: Event, begin, end):
@@ -136,26 +136,22 @@ class CalendarEventWidget(Widget):
                 self.time = f"{self.event.start.strftime(start_time_format)} - " \
                             f"{self.event.end.strftime(end_time_format)}"
 
-        # try:
-        #     icon, summary = EmojiPicker.split_summary(self.event.title)
-        #     self.summary = summary
-        #     if os.path.isfile(PathManager.get_new_emoji_path(f'{EmojiPicker.emoji_to_filename(icon)}.png')):
-        #         self.icon = QIcon(PathManager.get_new_emoji_path(f'{EmojiPicker.emoji_to_filename(icon)}.png'))
-        #     elif os.path.isfile(PathManager.get_calendar_default_icons_path(f'{self.event.calendar.name}.png')):
-        #         self.icon = QIcon(PathManager.get_calendar_default_icons_path(f'{self.event.calendar.name}.png'))
-        #     else:
-        #         self.icon = None
-        # except KeyError:
-        #     self.summary = None
-        #     self.icon = None
-        #     logging.getLogger(self.__class__.__name__).log(level=logging.ERROR, msg=self.event)
-        # except IndexError:
-        #     icon, summary = EmojiPicker.split_summary(self.event.title)
-        #     self.summary = summary
-        #     self.icon = None
+        try:
+            icon, summary = EmojiPicker.split_summary(self.event.title)
+            self.summary = summary
+            if icon:
+                self.icon = EmojiPicker.get_emoji_icon_from_unicode(icon, 32)
+            else:
+                self.icon = None
+        except KeyError:
+            self.summary = None
+            self.icon = None
+            logging.getLogger(self.__class__.__name__).log(level=logging.ERROR, msg=self.event)
+        except IndexError:
+            icon, summary = EmojiPicker.split_summary(self.event.title)
+            self.summary = summary
+            self.icon = None
 
-        self.summary = self.event.title
-        self.icon = None
         try:
             self.location = self.event.location
         except KeyError:
@@ -168,7 +164,7 @@ class CalendarEventWidget(Widget):
 
         self.show()
         if self.icon is not None:
-            img = ImageTools.pixmap_to_base64(self.icon.pixmap(18, 18))
+            img = ImageTools.pixmap_to_base64(self.icon.pixmap(28, 28))
         else:
             img = ''
         self.setStyleSheet('QToolTip {background-color: rgb(30, 30, 30); '
@@ -418,7 +414,7 @@ class CalendarEventWidget(Widget):
         painter.setFont(QFont('Calibri', 10))
         if self.icon is not None:
             self.icon.paint(painter, QRect(2, 2, 15, 15))
-            painter.drawText(QRect(0, 0, self.width(), self.height()), Qt.TextWordWrap, '       '+self.summary)
+            painter.drawText(QRect(0, 0, self.width(), self.height()), Qt.TextWordWrap, '      '+self.summary)
         else:
             painter.drawText(QRect(0, 0, self.width(), self.height()), Qt.TextWordWrap, self.summary)
 
