@@ -24,6 +24,7 @@ class Alarm:
         self.description = description
         self.action = action
 
+
 class Calendar:
     def __init__(self, calendar_id: str, name: str, access_role: CalendarAccessRole,
                  fg_color: QColor,
@@ -109,7 +110,6 @@ class Event:
 
     def get_unique_instance_id(self):
         return f'{self.id}{f":{self.recurring_event_id}" if self.recurring_event_id else ""}'
-
 
 
 class EventInstance:

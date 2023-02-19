@@ -17,6 +17,7 @@ from caldav.lib.error import AuthorizationError
 from requests.exceptions import SSLError
 
 from credentials import CalDAVCredentials, CredentialsNotValidException, CredentialType
+from plugins.calendarplugin.caldav.conversions import CalDavConversions
 from plugins.calendarplugin.calendar_plugin import CalendarPlugin, Event, Calendar, CalendarData, CalendarAccessRole, \
     Todo, Alarm
 import caldav
@@ -101,22 +102,12 @@ class CalDavPlugin(CalendarPlugin):
         self.log_info('trying to create event', event)
         try:
             calendar = self._get_calendar(calendar_id)
-            ret = calendar.save_event(self._ical_from_iev(event).to_ical())
+            ret = calendar.save_event(CalDavConversions.ical_from_iev(event).to_ical())
             return ret.vobject_instance.vevent
 
         except Exception as e:
             raise ConnectionError(e)
 
-    @staticmethod
-    def _ical_from_iev(ev: icalendar.Event) -> icalendar.Calendar:
-        c = icalendar.Calendar()
-        c.add_component(ev)
-        return c
-
-    def _ical_to_caldav_event(self, event: icalendar.Event, calendar: caldav.Calendar) -> caldav.Event:
-        return caldav.Event(self.client, data=self._ical_from_iev(event),
-                            url=calendar.canonical_url + event.get('UID') + '.ics',
-                            parent=calendar, id=event.get('UID'))
 
     def _update_event(self, event: icalendar.Event, calendar_id,
                       move_to_calendar_id=None) -> vobject.icalendar.RecurringComponent:
@@ -126,14 +117,14 @@ class CalDavPlugin(CalendarPlugin):
                 old_calendar = self._get_calendar(calendar_id)
                 new_calendar = self._get_calendar(move_to_calendar_id)
                 # 1) 'copy to new calendar'
-                edited_event = self._ical_to_caldav_event(event, new_calendar)
+                edited_event = CalDavConversions.ical_to_caldav_event(self.client, event, new_calendar)
                 ret = edited_event.save()
                 # 2) delete from old calendar
-                ev_2_del = self._ical_to_caldav_event(event, old_calendar)
+                ev_2_del = CalDavConversions.ical_to_caldav_event(self.client, event, old_calendar)
                 ev_2_del.delete()
             else:
                 calendar = self._get_calendar(calendar_id)
-                edited_event = self._ical_to_caldav_event(event, calendar)
+                edited_event = CalDavConversions.ical_to_caldav_event(self.client, event, calendar)
                 # ev2 = calendar.event_by_uid(event.get('UID'))
                 # ev2.vobject_instance.vevent = vobject.readOne(event.to_ical().decode())
                 # ret = ev2.save()
@@ -150,7 +141,7 @@ class CalDavPlugin(CalendarPlugin):
         self.log('trying to delete %r' % event)
         try:
             calendar = self._get_calendar(calendar_id)
-            event_to_delete = self._ical_to_caldav_event(event, calendar)
+            event_to_delete = CalDavConversions.ical_to_caldav_event(self.client, event, calendar)
             event_to_delete.delete()
             # ev2 = calendar.event_by_uid(event.get('UID'))
             # ret = ev2.delete()
@@ -166,7 +157,7 @@ class CalDavPlugin(CalendarPlugin):
             for cal in self.client.principal().calendars():
 
                 self.log_info(f'get props for {cal}')
-                cal_id = self._calendar_from_cal_dav_cal(cal).id
+                cal_id = CalDavConversions.calendar_from_cal_dav_cal(cal).id
                 if cal_id == calendar_id:
                     return cal
         else:
@@ -178,7 +169,7 @@ class CalDavPlugin(CalendarPlugin):
         if not self._connect():
             return None
         todos = self._calendars[calendar.id].todos()
-        return [self._todo_from_vtodo(td.vobject_instance.vtodo, calendar) for td in todos]
+        return [CalDavConversions.todo_from_vtodo(td.vobject_instance.vtodo, calendar) for td in todos]
 
     def _get_calendars(self) -> Union[List[Calendar], None]:
         if not self._connect():
@@ -191,7 +182,7 @@ class CalDavPlugin(CalendarPlugin):
 
         for _cal in _cals:
             self.log_info(f'get props for {_cal}')
-            calendar = self._calendar_from_cal_dav_cal(_cal)
+            calendar = CalDavConversions.calendar_from_cal_dav_cal(_cal)
             calendars.append(calendar)
 
             self._calendars[calendar.id] = _cal
@@ -212,7 +203,7 @@ class CalDavPlugin(CalendarPlugin):
             events.extend(self._events_from_vevent(ev, calendar, days_in_future, days_in_past))
         return events
 
-    def _events_from_vevent(self, ev, calendar: Calendar, days_in_future=7, days_in_past=1):
+    def _events_from_vevent(self, ev, calendar: Calendar, days_in_future=7, days_in_past=1) -> List[Event]:
         events = []
         if ev.vobject_instance.vevent.rruleset:
             self.log_info(f"FOUND RECURRING EVENT: {ev.vobject_instance.vevent.summary}")
@@ -228,7 +219,7 @@ class CalDavPlugin(CalendarPlugin):
                              datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=days_in_future))
             self.log_info(f"INSTANCES: {time_instances}")
             for time_instance in time_instances:
-                event = self._event_from_vevent(vobject.readOne(time_instance.to_ical().decode()), calendar,
+                event = CalDavConversions.event_from_vevent(vobject.readOne(time_instance.to_ical().decode()), calendar,
                                                 recurrence_id=str(time_instance.get('DTSTART').dt),
                                                 rruleset=ev.vobject_instance.vevent.rruleset)
                 # duration = event.end - event.start
@@ -236,136 +227,14 @@ class CalDavPlugin(CalendarPlugin):
                 # event.set_end_time(time_instance + duration)
                 events.append(event)
         else:
-            event = self._event_from_vevent(ev.vobject_instance.vevent, calendar)
+            event = CalDavConversions.event_from_vevent(ev.vobject_instance.vevent, calendar)
             events.append(event)
         return events
 
-    def _ical_event_from_event(self, event: Event) -> icalendar.Event:
 
-        ical = icalendar.Event()
-        ical.add('uid', event.id if event.id is not None else str(uuid.uuid1()))
-        ical.add('dtstart', event.start if not event.all_day else event.start.date())
-        ical.add('dtend', event.end if not event.all_day else event.end.date())
-        ical.add('summary', event.title)
-        if event.bg_color is not None:
-            ical.add('ffcolor', event.bg_color.name())
-        ical.add('location', event.location)
-        ical.add('description', event.description)
-        if event.recurrence:
-            rec_str = re.sub('.*\n?RRULE:', '', str(event.recurrence))
-            ical.add('rrule', icalendar.vRecur.from_ical(rec_str))
-        return ical
 
-    def _todo_from_vtodo(self, td: vobject.icalendar.RecurringComponent, calendar: Calendar) -> Todo:
 
-        if hasattr(td, 'dtstart') and td.dtstart:
-            all_day = not isinstance(td.dtstart.value, datetime.datetime)
-            start = td.dtstart.value if not all_day else datetime.datetime.combine(td.dtstart.value,
-                                                                                   datetime.datetime.min.time())
-        else:
-            all_day = False
-            start = None
-        if td.due:
-            all_day = not isinstance(td.due.value, datetime.datetime)
-            due = td.due.value if not all_day else datetime.datetime.combine(td.due.value,
-                                                                             datetime.datetime.min.time())
-            if 'valarm' in td.contents:
-                alarm = td.valarm
-                trigger = alarm.trigger.value
-                action = alarm.action.value
-                desc = alarm.description.value
-                alarmtime = due.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode())) + trigger
-                self.log(f'TODO-ALARM: {trigger}, {alarmtime} {action}, {desc}')
-        else:
-            due = None
 
-        return Todo(todo_id=td.uid.value if 'uid' in td.contents else '',
-                    title=td.summary.value if 'summary' in td.contents else '',
-                    start=start.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode())) if start else
-                    None,
-                    due=due.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode())) if due else None,
-                    description=td.description.value if 'description' in td.contents else '',
-                    location=td.location.value if 'location' in td.contents else '',
-                    categories=[c for c in td.categories.value] if 'categories' in td.contents else [],
-                    percent_complete=td.percent_complete.value if 'percent-complete' in td.contents else 0,
-                    all_day=all_day,
-                    calendar=calendar,
-                    fg_color=None,
-                    bg_color=QColor(td.ffcolor.value) if 'ffcolor' in td.contents else None,
-                    data={'id': td.uid.value, 'synchronized': True},
-                    timezone=None,
-                    recurring_event_id=None,
-                    recurrence=None,
-                    synchronized=True
-                    )
-
-    def _event_from_vevent(self, ev: vobject.icalendar.RecurringComponent, calendar: Calendar,
-                           recurrence_id: str = None, rruleset: dateutil.rrule.rruleset = None) -> Event:
-
-        all_day = not isinstance(ev.dtstart.value, datetime.datetime)
-        start = ev.dtstart.value if not all_day else datetime.datetime.combine(ev.dtstart.value,
-                                                                               datetime.datetime.min.time())
-        end = ev.dtend.value if not all_day else datetime.datetime.combine(ev.dtend.value,
-                                                                           datetime.datetime.min.time())
-
-        alarm = None
-        if 'valarm' in ev.contents:
-            valarm = ev.valarm
-            trigger = valarm.trigger.value
-            action = valarm.action.value
-            desc = valarm.description.value
-            alarmtime = start.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode())) + trigger
-            alarm = Alarm(alarmtime, trigger, desc, action)
-            # self.log(f'{trigger}, {alarmtime} {action}, {desc}')
-
-        recurrence = None
-        if recurrence_id is not None:
-            recurrence = dateutil.rrule.rrulestr(str(rruleset._rrule[0]))
-        return Event(event_id=ev.uid.value if 'uid' in ev.contents else '',
-                     title=ev.summary.value if 'summary' in ev.contents else '',
-                     start=start.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode())),
-                     end=end.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode())),
-                     description=ev.description.value if 'description' in ev.contents else '',
-                     location=ev.location.value if 'location' in ev.contents else '',
-                     all_day=all_day,
-                     calendar=calendar,
-                     fg_color=None,
-                     bg_color=QColor(ev.ffcolor.value) if 'ffcolor' in ev.contents else None,
-                     data={'id': ev.uid.value, 'synchronized': True},
-                     timezone=None,
-                     recurring_event_id=recurrence_id,
-                     recurrence=recurrence,
-                     synchronized=True,
-                     alarm=alarm
-                     )
-
-    @staticmethod
-    def _calendar_from_cal_dav_cal(cal: caldav.Calendar) -> Calendar:
-        cal_id = str(cal.url)
-        # cal_name = data.get('displayname', None)
-        # cal_sync_token = data.get('sync-token', None)
-        props = cal.get_properties([caldav.dav.DisplayName(),
-                                    caldav.elements.ical.CalendarColor(),
-                                    caldav.elements.cdav.CalendarDescription()])
-        print('get display name')
-        cal_name = props[caldav.dav.DisplayName().tag]
-        print('getcal color')
-        cal_color = props[caldav.elements.ical.CalendarColor().tag][:7]
-        print('get description')
-        primary = props[caldav.elements.cdav.CalendarDescription().tag] == 'primary'
-        # print('get display name')
-        # cal_name = cal.get_property(caldav.dav.DisplayName())
-        # print('getcal color')
-        # cal_color = cal.get_property(caldav.elements.ical.CalendarColor())[:7]
-        # print('get description')
-        # primary = cal.get_property(caldav.elements.cdav.CalendarDescription()) == 'primary'
-        return Calendar(calendar_id=cal_id, name=cal_name,
-                        primary=primary,
-                        fg_color=QColor('#ffffff'),
-                        bg_color=QColor(cal_color),
-                        access_role=CalendarAccessRole.OWNER,
-                        data={'url': str(cal.url)}
-                        )
 
     def quit(self):
         pass
@@ -373,8 +242,8 @@ class CalDavPlugin(CalendarPlugin):
     def create_event(self, event: Event):
         self.log_warn('CREATE EVENT', event)
         try:
-            created_event_data = self._create_event(self._ical_event_from_event(event), event.calendar.id)
-            return self._event_from_vevent(created_event_data, event.calendar)
+            created_event_data = self._create_event(CalDavConversions.cal_event_from_event(event), event.calendar.id)
+            return CalDavConversions.event_from_vevent(created_event_data, event.calendar)
         except ConnectionError:
             event.id = f'non-sync{uuid.uuid4()}'
             event.data['id'] = event.id
@@ -383,7 +252,7 @@ class CalDavPlugin(CalendarPlugin):
 
     def delete_event(self, event: Event) -> bool:
 
-        return self._delete_event(self._ical_event_from_event(event), event.calendar.id)
+        return self._delete_event(CalDavConversions.ical_event_from_event(event), event.calendar.id)
 
     def update_event(self, event: Event, moved_from_calendar: Union[Calendar, None] = None) -> Union[Event, None]:
         if moved_from_calendar is not None:
@@ -393,9 +262,9 @@ class CalDavPlugin(CalendarPlugin):
             move_to_calendar_id = None
             calendar_id = event.calendar.id
         try:
-            updated_event = self._update_event(self._ical_event_from_event(event), calendar_id=calendar_id,
+            updated_event = self._update_event(CalDavConversions.ical_event_from_event(event), calendar_id=calendar_id,
                                                move_to_calendar_id=move_to_calendar_id)
-            return self._event_from_vevent(updated_event, event.calendar)
+            return CalDavConversions.event_from_vevent(updated_event, event.calendar)
         except ConnectionError:
             if moved_from_calendar is not None:
                 event.calendar = moved_from_calendar
