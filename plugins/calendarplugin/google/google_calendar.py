@@ -21,6 +21,7 @@ class GoogleCalendarPlugin(CalendarPlugin):
 
     def __init__(self):
         super().__init__()
+        self.log_warn('This Plugin is Deprecated and might not work correctly')
 
     def setup(self):
         self.get_event_colors()

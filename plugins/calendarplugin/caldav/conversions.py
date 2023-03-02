@@ -1,20 +1,33 @@
 import datetime
 import re
 import uuid
+from typing import List, Union, Dict
 
+from tzlocal import get_localzone
 import caldav
 import icalendar
 import pytz
+
+import recurring_ical_events
+import vobject
 from PyQt5.QtCore import QTimeZone
 from PyQt5.QtGui import QColor
 from dateutil import rrule
 from vobject.icalendar import RecurringComponent
 
-from plugins.calendarplugin.calendar_plugin import Event, Calendar, Alarm, CalendarAccessRole, Todo
+from plugins.calendarplugin.calendar_plugin import Event, Calendar, Alarm, CalendarAccessRole, Todo, EventInstance
+
+
+class CalDavObjectUpdate:
+    def __init__(self, updates, deletes):
+        self.updates = updates
+        self.deletes = deletes
+
+    def __str__(self):
+        return f'new: {self.updates}, del: {self.deletes}'
 
 
 class CalDavConversions:
-
     PERCENT_COMPLETE = 'percent-complete'
     CATEGORIES = 'categories'
     DTSTART = 'dtstart'
@@ -24,11 +37,10 @@ class CalDavConversions:
     LOCATION = 'location'
     DESCRIPTION = 'description'
     RRULE = 'rrule'
+    RECURRENCE_ID = 'recurrence-id'
+    EXDATE = 'exdate'
     VALARM = 'valarm'
     COLOR = 'ffcolor'
-
-
-
 
     @classmethod
     def calendar_from_cal_dav_cal(cls, cal: caldav.Calendar) -> Calendar:
@@ -48,26 +60,39 @@ class CalDavConversions:
                         )
 
     @classmethod
-    def ical_from_iev(cls, ev: icalendar.Event) -> icalendar.Calendar:
+    def ical_from_iev(cls, evs: List[icalendar.Event]) -> icalendar.Calendar:
         c = icalendar.Calendar()
-        c.add_component(ev)
+        for ev in evs:
+            c.add_component(ev)
         return c
 
     @classmethod
-    def ical_to_caldav_event(cls, client: caldav.DAVClient,
-                             event: icalendar.Event,
-                             calendar: caldav.Calendar) -> caldav.Event:
-        return caldav.Event(client, data=cls.ical_from_iev(event),
-                            url=calendar.canonical_url + event.get('UID') + '.ics',
-                            parent=calendar, id=event.get('UID'))
+    def caldav_event_from_event(cls, event: Event, caldav_calendar: caldav.Calendar):
+        return cls.ical_event_objects_to_caldav_event(cls.ical_object_list_from_event(event), caldav_calendar)
 
     @classmethod
-    def ical_event_from_event(cls, event: Event) -> icalendar.Event:
+    def ical_event_objects_to_caldav_event(cls,
+                                           event_objects: List[icalendar.Event],
+                                           calendar: caldav.Calendar) -> caldav.Event:
+        return caldav.Event(calendar.client, data=cls.ical_from_iev(event_objects),
+                            url=calendar.canonical_url + event_objects[0].get('UID') + '.ics',
+                            parent=calendar, id=event_objects[0].get('UID'))
+
+    @classmethod
+    def ical_object_list_from_event(cls, event: Event) -> List[icalendar.Event]:
+        components = [cls.single_ical_event_from_event(event)]
+        for sub in event.subcomponents.values():
+            components.append(cls.single_ical_event_from_event(sub))
+        return components
+
+    @classmethod
+    def single_ical_event_from_event(cls, event: Event) -> icalendar.Event:
 
         ical = icalendar.Event()
+        local_tz = pytz.timezone(event.timezone) if event.timezone else get_localzone()
         ical.add(cls.UID, event.id if event.id is not None else str(uuid.uuid1()))
-        ical.add(cls.DTSTART, event.start if not event.all_day else event.start.date())
-        ical.add(cls.DTEND, event.end if not event.all_day else event.end.date())
+        ical.add(cls.DTSTART, event.start.astimezone(local_tz) if not event.all_day else event.start.date())
+        ical.add(cls.DTEND, event.end.astimezone(local_tz) if not event.all_day else event.end.date())
         ical.add(cls.SUMMARY, event.title)
         if event.bg_color is not None:
             ical.add(cls.COLOR, event.bg_color.name())
@@ -76,31 +101,65 @@ class CalDavConversions:
         if event.recurrence:
             rec_str = re.sub('.*\n?RRULE:', '', str(event.recurrence))
             ical.add(cls.RRULE, icalendar.vRecur.from_ical(rec_str))
+            if event.exdates:
+                for exdate in event.exdates:
+                    ical.add(cls.EXDATE, exdate.astimezone(local_tz))
+        if event.recurring_event_id:
+            ical.add(cls.RECURRENCE_ID,
+                     datetime.datetime.strptime(event.recurring_event_id, '%Y%m%dT%H%M%SZ').astimezone(local_tz))
         return ical
 
     @classmethod
-    def event_from_vevent(cls, ev: RecurringComponent, calendar: Calendar,
-                          recurrence_id: str = None, rruleset: rrule.rruleset = None) -> Event:
+    def event_from_vobject_instance(cls, vobject_instance: vobject, calendar: Calendar) -> Event:
+        vevent_list: List[RecurringComponent] = vobject_instance.contents['vevent']
+        if isinstance(vevent_list, list):
+            root_component = [vev for vev in vevent_list if cls.RECURRENCE_ID not in vev.contents][0]
+            sub_components = [vev for vev in vevent_list if cls.RECURRENCE_ID in vev.contents]
+            return CalDavConversions.event_from_recurring_component(
+                root_component, calendar, rruleset=root_component.rruleset,
+                subcomponents={
+                    sub.contents[cls.RECURRENCE_ID][0].value.strftime('%Y%m%dT%H%M%SZ'):
+                        CalDavConversions.event_from_recurring_component(
+                            sub, calendar,
+                            recurrence_id=sub.contents[cls.RECURRENCE_ID][0].value.strftime('%Y%m%dT%H%M%SZ'))
+                    for sub in sub_components})
+        else:
+            return CalDavConversions.event_from_recurring_component(vobject_instance.vevent, calendar,
+                                                                          vobject_instance.vevent.rruleset)
+
+    @classmethod
+    def event_from_recurring_component(cls, ev: RecurringComponent, calendar: Calendar,
+                                       recurrence_id: str = None, rruleset: rrule.rruleset = None,
+                                       subcomponents: Dict[str, Event] = None) -> Event:
 
         all_day = not isinstance(ev.dtstart.value, datetime.datetime)
         start = ev.dtstart.value if not all_day else datetime.datetime.combine(ev.dtstart.value,
                                                                                datetime.datetime.min.time())
-        end = ev.dtend.value if not all_day else datetime.datetime.combine(ev.dtend.value,
-                                                                           datetime.datetime.min.time())
+        if hasattr(ev, 'dtend'):
+            end = ev.dtend.value if not all_day else datetime.datetime.combine(ev.dtend.value,
+                                                                               datetime.datetime.min.time())
+        elif all_day:
+            end = start
+        else:
+            print(f'WEIRD: {ev} has no dtend, but is not all-day.... DEFAULTING TO 1 HOUR DURATION!')
+            end = start + datetime.timedelta(hours=1)
 
         alarm = None
         if cls.VALARM in ev.contents:
             valarm = ev.valarm
             trigger = valarm.trigger.value
             action = valarm.action.value
-            desc = valarm.description.value
+            desc = valarm.description.value if hasattr(valarm, 'description') else None
             alarmtime = start.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode())) + trigger
             alarm = Alarm(alarmtime, trigger, desc, action)
             # self.log(f'{trigger}, {alarmtime} {action}, {desc}')
 
         recurrence = None
-        if recurrence_id is not None:
+        exdates = None
+        if rruleset is not None:
             recurrence = rrule.rrulestr(str(rruleset._rrule[0]))
+            exdates = [datetime.datetime(year=dt.year, month=dt.month, day=dt.day,
+                                         hour=dt.hour, minute=dt.minute, second=dt.second) for dt in rruleset._exdate]
         return Event(event_id=ev.uid.value if cls.UID in ev.contents else '',
                      title=ev.summary.value if cls.SUMMARY in ev.contents else '',
                      start=start.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode())),
@@ -115,9 +174,45 @@ class CalDavConversions:
                      timezone=None,
                      recurring_event_id=recurrence_id,
                      recurrence=recurrence,
+                     exdates=exdates,
+                     subcomponents=subcomponents,
                      synchronized=True,
                      alarm=alarm
                      )
+
+    @classmethod
+    def expand_ical_event(cls, ical_event: icalendar.Event, start, end):
+        time_instances = recurring_ical_events.of(ical_event) \
+            .between(start, end)
+        return time_instances
+
+    @classmethod
+    def expand_event(cls, event: Event, ical_event: icalendar.Event, start, end) -> List[EventInstance]:
+        return [EventInstance(root_event=event,
+                              instance=cls.
+                              event_from_recurring_component(
+                                  vobject.readOne(instance.to_ical().decode()),
+                                  recurrence_id=instance.get('RECURRENCE-ID').
+                                      dt.strftime('%Y%m%dT%H%M%SZ') if instance.get('RECURRENCE-ID')
+                                  else instance.get('DTSTART').
+                                      dt.strftime('%Y%m%dT%H%M%SZ'),
+                                  calendar=event.calendar)
+                              ) for instance in cls.expand_ical_event(ical_event, start, end)]
+
+    @classmethod
+    def expand_caldav_event(cls, raw_event: caldav.Event, event: Event,
+                            days_in_future: int, days_in_past: int) -> Union[Event, List[EventInstance]]:
+        expandable_event = raw_event.vobject_instance.vevent
+        if expandable_event.rruleset:
+            root_event = cls.event_from_vobject_instance(raw_event.vobject_instance, event.calendar)
+            return cls.expand_event(root_event,
+                                                  raw_event.icalendar_instance,
+                                                  start=datetime.datetime.now().replace(tzinfo=pytz.UTC) -
+                                                        datetime.timedelta(days=days_in_past),
+                                                  end=datetime.datetime.now().replace(tzinfo=pytz.UTC) +
+                                                      datetime.timedelta(days=days_in_future))
+        else:
+            return cls.event_from_recurring_component(expandable_event, event.calendar)
 
     @classmethod
     def todo_from_vtodo(cls, td: RecurringComponent, calendar: Calendar) -> Todo:

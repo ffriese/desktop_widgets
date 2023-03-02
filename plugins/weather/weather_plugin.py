@@ -1,5 +1,6 @@
 import copy
 import logging
+import bisect
 from datetime import datetime, timedelta
 from typing import Union
 try:
@@ -89,12 +90,17 @@ class WeatherReport:
     def get_report_from(self, start: datetime, end: datetime) -> OrderedDict[datetime, SingleReport]:
         start = start.astimezone(tzlocal())
         end = end.astimezone(tzlocal())
-        return OrdDict([(k, v) for k, v in self.get_merged_report().items() if start <= k <= end])
+        items = [(k, v) for k, v in self.get_merged_report().items() if v is not None]
+        keys = [k for k, v in items]
+        start_idx = bisect.bisect_left(keys, start)
+        end_idx = bisect.bisect_right(keys, end)
+        d = OrdDict(items[start_idx:end_idx])
+        return d
 
 
 class WeatherPlugin(BasePlugin):
 
-    def update_synchronously(self, allow_cache=False, *args, **kwargs) -> Union[WeatherReport, None]:
+    def update_synchronously(self, *args, **kwargs) -> Union[WeatherReport, None]:
         raise NotImplementedError()
 
     def setup(self):

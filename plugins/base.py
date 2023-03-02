@@ -42,7 +42,7 @@ class BasePlugin(QObject):
             return
         self.new_data_available.emit(results)
 
-    def _update_sync(self, allow_cache=False, *args, **kwargs) -> object:
+    def _update_sync(self, *args, **kwargs) -> object:
         """
          wrapper function to pass exceptions to the widget for handling
 
@@ -56,7 +56,7 @@ class BasePlugin(QObject):
         except NotImplementedError as ne:
             raise ne
         except Exception as e:
-            self.log(self, 'CAUGHT EXCEPTION IN UPDATE SYNC:', e, type(e), level=logging.ERROR)
+            self.log_error(self, 'CAUGHT EXCEPTION IN UPDATE SYNC:', e, type(e), level=logging.ERROR)
             self.threaded_exception.emit(e)
             return e
 

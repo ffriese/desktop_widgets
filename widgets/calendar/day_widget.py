@@ -4,14 +4,13 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QResizeEvent
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QApplication
 
-from plugins.calendarplugin.calendar_plugin import Event
+from plugins.calendarplugin.calendar_plugin import Event, EventInstance
 from widgets.calendar.calendar_event import CalendarEventWidget
 from widgets.calendar.timeline_widget import TimelineWidget
 from helpers.widget_helpers import CalendarHelper
 
 
 class DayWidget(TimelineWidget):
-
     event_time_change_request = pyqtSignal(CalendarEventWidget, datetime, datetime)
 
     def __init__(self, day: datetime.date, start_hour: int, end_hour: int):
@@ -54,46 +53,55 @@ class DayWidget(TimelineWidget):
 
         QApplication.sendEvent(self, QResizeEvent(self.size(), self.size()))
 
-    def resizeEvent(self, event):
-        for ev in self.cal_events.values():
-            try:
-                if ev.end < self.start_hour or ev.begin > self.end_hour:
-                    ev.setVisible(False)
-                    ev.setProperty('hiddenFromRange', True)
-                else:
-                    if ev.property('hiddenFromRange'):
-                        ev.setVisible(True)
-                    start_y = int(max(0, ev.begin-self.start_hour) * self.hour_height())
-                    height = min(int((ev.end - max(ev.begin, self.start_hour)) * self.hour_height()),
-                                 self.height()-start_y)
-                    ev.setGeometry(0,
-                                   start_y,
-                                   self.width(),
-                                   height
-                                   )
-            except RuntimeError:
-                pass
+    def move_event_widget_to_position(self, event_widget: CalendarEventWidget):
+        try:
+            if event_widget.end < self.start_hour or event_widget.begin > self.end_hour:
+                event_widget.setVisible(False)
+                event_widget.setProperty('hiddenFromRange', True)
+            else:
+                if event_widget.property('hiddenFromRange'):
+                    event_widget.setVisible(True)
+                start_y = int(max(0, event_widget.begin - self.start_hour) * self.hour_height())
+                height = min(int((event_widget.end - max(event_widget.begin, self.start_hour)) * self.hour_height()),
+                             self.height() - start_y)
+                event_widget.setGeometry(0,
+                                         start_y,
+                                         self.width(),
+                                         height
+                                         )
+        except RuntimeError:
+            pass
 
-        CalendarHelper.scale_events([c for c in self.cal_events.values() if c.isVisible()], self.width(), self.height(),
+    def resizeEvent(self, resizeEvent):
+        event_widgets = self.collect_event_widgets()
+        for ev in event_widgets:
+            self.move_event_widget_to_position(ev)
+
+        CalendarHelper.scale_events([c for c in event_widgets if c.isVisible()], self.width(), self.height(),
                                     self.start_hour, self.end_hour)
 
     def add_event(self, event: Event, begin, end):
         super().add_event(event, begin, end)
-        self.cal_events[event.id].time_change_request.connect(self.rescale_event_callback)
+        if isinstance(event, EventInstance):
+            if event.root_event.id in self.cal_events and isinstance(self.cal_events[event.root_event.id], dict):
+                self.cal_events[event.root_event.id][event.instance_id].time_change_request.connect(
+                    self.rescale_event_callback)
+        else:
+            self.cal_events[event.id].time_change_request.connect(self.rescale_event_callback)
 
     def rescale_event_callback(self, new_start, new_end):
         self.event_time_change_request.emit(self.sender(), new_start, new_end)
 
-    def _event_got_moved(self, event: CalendarEventWidget, new_pos):
-        
-        new_pos.setX(event.x())
-        new_pos.setY(min(max(new_pos.y(), 0), self.height()-5))
-        event.move(new_pos)
+    def _event_got_moved(self, event_widget: CalendarEventWidget, new_pos):
 
-    def _event_got_moved_end(self, event: CalendarEventWidget, new_pos):
-        new_start = ((new_pos.y()/self.height()) * self.hours_displayed()) + self.start_hour
-        hour_offset = new_start-event.begin
-        hour_offset = event.round_time(hour_offset, round_min=5.0)
-        self.event_time_change_request.emit(event,
-                                            event.event.start + timedelta(hours=hour_offset),
-                                            event.event.end + timedelta(hours=hour_offset))
+        new_pos.setX(event_widget.x())
+        new_pos.setY(min(max(new_pos.y(), 0), self.height() - 5))
+        event_widget.move(new_pos)
+
+    def _event_got_moved_end(self, event_widget: CalendarEventWidget, new_pos):
+        new_start = ((new_pos.y() / self.height()) * self.hours_displayed()) + self.start_hour
+        hour_offset = new_start - event_widget.begin
+        hour_offset = event_widget.round_time(hour_offset, round_min=5.0)
+        self.event_time_change_request.emit(event_widget,
+                                            event_widget.event_instance().start + timedelta(hours=hour_offset),
+                                            event_widget.event_instance().end + timedelta(hours=hour_offset))

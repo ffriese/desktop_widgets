@@ -3,6 +3,7 @@ from datetime import datetime, date
 from enum import Enum
 from typing import Union, List, Dict, Any
 
+import dateutil.rrule
 import pytz
 from PyQt5.QtCore import QTimeZone
 from PyQt5.QtGui import QColor
@@ -59,9 +60,12 @@ class Event:
                  fg_color: QColor = None,
                  bg_color: QColor = None,
                  recurring_event_id: str = None,
-                 recurrence: List[str] = None,
+                 recurrence: dateutil.rrule.rrule = None,
+                 exdates: List[datetime] = None,
                  synchronized: bool = True,
-                 alarm: Alarm = None
+                 alarm: Alarm = None,
+                 subcomponents: Dict[str, "Event"] = None,
+                 instances: List["EventInstance"] = None
                  ):
         self.id = event_id
         self.title = title
@@ -75,9 +79,12 @@ class Event:
         self.timezone = timezone
         self.recurring_event_id = recurring_event_id
         self.recurrence = recurrence
+        self.exdates = exdates
         self.fg_color = fg_color
         self.bg_color = bg_color
         self.alarm = alarm
+        self.subcomponents = subcomponents if subcomponents else {}
+        self.instances = instances
         self._synchronized = synchronized
 
     def get_fg_color(self):
@@ -108,14 +115,12 @@ class Event:
     def set_end_time(self, end_time: datetime):
         self.end = end_time.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode()))
 
-    def get_unique_instance_id(self):
-        return f'{self.id}{f":{self.recurring_event_id}" if self.recurring_event_id else ""}'
-
 
 class EventInstance:
-    def __init__(self, event: Event, instance_id: str = None):
-        self.event = event
-        self.instance_id = instance_id
+    def __init__(self, root_event: Event, instance: Event):
+        self.root_event = root_event
+        self.instance = instance
+        self.instance_id = instance.recurring_event_id
 
 
 class Todo:
@@ -136,8 +141,10 @@ class Todo:
 
 
 class CalendarData:
-    def __init__(self, calendars: Dict[str, Calendar], events: Dict[str, Event], colors: Dict[Any, Dict[str, QColor]],
-                 todos: Dict[str, Todo] = None):
+    def __init__(self, calendars: Dict[str, Calendar], events: Dict[str, Union[Event, List[EventInstance]]],
+                 colors: Dict[Any, Dict[str, QColor]],
+                 todos: Dict[str, Todo] = None, account_name: str = None):
+        self.account_name = account_name
         self.calendars = calendars
         self.events = events
         self.todos = todos if todos else []
@@ -152,11 +159,20 @@ class CalendarData:
 
 class CalendarPlugin(BasePlugin):
 
-    def update_async(self, days_in_future: int = 7, days_in_past: int = 1, allow_cache=False, *args, **kwargs) -> None:
-        super().update_async(allow_cache=False, days_in_future=days_in_future, days_in_past=days_in_past,
+    COLORS = {}
+
+    class CacheMode(Enum):
+        FORCE_REFRESH = 1,
+        REFRESH_LATER = 2,
+        ALLOW_CACHE = 3
+
+    def update_async(self, days_in_future: int, days_in_past: int,
+                     cache_mode=CacheMode.FORCE_REFRESH, *args, **kwargs) -> None:
+        self.log_info(self, 'async', cache_mode)
+        super().update_async(cache_mode=cache_mode, days_in_future=days_in_future, days_in_past=days_in_past,
                              *args, **kwargs)
 
-    def update_synchronously(self, days_in_future: int, days_in_past: int, allow_cache=False,
+    def update_synchronously(self, days_in_future: int, days_in_past: int,
                              *args, **kwargs) -> Union[CalendarData, None]:
         raise NotImplementedError()
 
@@ -166,14 +182,25 @@ class CalendarPlugin(BasePlugin):
     def setup(self):
         raise NotImplementedError()
 
-    def create_event(self, event: Event) -> Union[Event, None]:
+    def create_event(self, event: Event,
+                     days_in_future: int, days_in_past: int) -> Union[Event, List[EventInstance]]:
         raise NotImplementedError()
 
     def delete_event(self, event: Event) -> bool:
         raise NotImplementedError()
 
-    def update_event(self, event: Event, moved_from_calendar: Union[Calendar, None] = None) -> Union[Event, None]:
+    def delete_event_instance(self, instance: EventInstance,
+                              days_in_future: int, days_in_past: int) -> Union[Event, List[EventInstance]]:
         raise NotImplementedError()
+
+    def update_event(self, event: Event,
+                     days_in_future: int, days_in_past: int,
+                     moved_from_calendar: Union[Calendar, None] = None,
+                     ) -> Union[Event, List[EventInstance]]:
+        raise NotImplementedError()
+
+    def update_event_instance(self, instance: EventInstance) -> Union[Event, List[EventInstance]]:
+        raise NotImplementedError
 
     def get_event_colors(self) -> Dict[Any, QColor]:
         raise NotImplementedError()
@@ -214,78 +241,83 @@ class CalendarOfflineCache:
     def __repr__(self):
         return f"CalendarOfflineCache(new:{self.created_events}, update:{self.updated_events}, del:{self.deleted_events})"
 
-    def try_to_apply_cache(self, plugin: CalendarPlugin):
-        events_to_display = []
-        events_to_remove = []
-        try:
-            plugin.log_info('got myself some data-cache:', self.__repr__())
-            created = list(self.created_events)
-            for new_event in created:
-                plugin.log_info('new offline event: ', new_event.data)
-                ne = copy.deepcopy(new_event)
-                temp_id = ne.data.pop('id')
-                ne.data.pop('synchronized')
-                ne.id = None
-                synced = plugin.create_event(ne)
-                if synced.is_synchronized():
-                    self.created_events.remove(new_event)
-                    plugin.log_info('successfully created ', new_event.data)
-                    # self.display_new_event(synced)
-                    events_to_display.append(synced)
-                    if temp_id in self.updated_events.keys():
-
-                        plugin.log_info(f"moving {temp_id} to {synced.id}")
-                        newly_synced = self.updated_events.pop('temp_id')
-                        self.updated_events[synced.id] = newly_synced
-                    else:
-                        plugin.log_info(f"{temp_id} not found in update cache")
-                else:
-                    plugin.log_info('could not create. kept in cache', new_event)
-                    # self.display_new_event(new_event)
-                    events_to_display.append(new_event)
-
-            for update_id in list(self.updated_events.keys()):
-                if update_id.startswith("non-sync"):
-                    if update_id in self.created_events:
-                        plugin.log_warn(f'updates for {update_id} are ignored as the main event is not synced')
-                        continue
-                    else:
-                        plugin.log_error(
-                            f"{update_id} is an unknown un-synced event. this should not have happened. removing...")
-                        self.updated_events.pop(update_id)
-                        continue
-                updated = self.updated_events[update_id]
-                last_change = updated[-1]
-                upd_event = last_change['new_data']
-                ne = copy.deepcopy(upd_event)
-                ne.data.pop('synchronized')
-                moved_from = None if updated[0]['old_calendar'] == upd_event.calendar else updated[0]['old_calendar']
-                synced = plugin.update_event(ne, moved_from_calendar=moved_from)
-                if synced.is_synchronized():
-                    self.updated_events.pop(update_id)
-                    plugin.log_info('successfully updated ', upd_event.data)
-                    # self.display_new_event(synced)
-                    events_to_display.append(synced)
-                else:
-                    plugin.log_info('could not update. kept in cache', upd_event)
-                    # self.display_new_event(upd_event)
-                    events_to_display.append(upd_event)
-
-            for deleted in list(self.deleted_events):
-                plugin.log_info('DELETED EVENT: ', deleted.data)
-
-                if plugin.delete_event(deleted):
-                    plugin.log_info('successfully deleted')
-                    # self.event_cache['delete'].remove(deleted)
-
-                else:
-                    plugin.log_info('could not delete. kept in cache', deleted.data)
-                    # self.view.remove_event(deleted.id)
-                    events_to_remove.append(deleted.id)
-            # self.__data__['event_cache'] = self.event_cache
-            # self._save_data()
-            plugin.log_info('got myself some cache:', self.__repr__())
-
-        except KeyError:
-            plugin.log_warn('no event cache yet. might get initialized in the future...')
-        return events_to_display, events_to_remove
+    # @time_method
+    # def try_to_apply_cache(self, plugin: CalendarPlugin):
+    #     events_to_display = []
+    #     events_to_remove = []
+    #     try:
+    #         plugin.log_info('got myself some data-cache:', self.__repr__())
+    #         created = list(self.created_events)
+    #         for new_event in created:
+    #             plugin.log_info('new offline event: ', new_event.data)
+    #             ne = copy.deepcopy(new_event)
+    #             temp_id = ne.data.pop('id')
+    #             ne.data.pop('synchronized')
+    #             ne.id = None
+    #             synced = plugin.create_event(ne,
+    #                                          days_in_future=12,
+    #                                          days_in_past=1
+    #                                          )
+    #             if synced.is_synchronized():
+    #                 self.created_events.remove(new_event)
+    #                 plugin.log_info('successfully created ', new_event.data)
+    #                 # self.display_new_event(synced)
+    #                 events_to_display.append(synced)
+    #                 if temp_id in self.updated_events.keys():
+    #
+    #                     plugin.log_info(f"moving {temp_id} to {synced.id}")
+    #                     newly_synced = self.updated_events.pop('temp_id')
+    #                     self.updated_events[synced.id] = newly_synced
+    #                 else:
+    #                     plugin.log_info(f"{temp_id} not found in update cache")
+    #             else:
+    #                 plugin.log_info('could not create. kept in cache', new_event)
+    #                 # self.display_new_event(new_event)
+    #                 events_to_display.append(new_event)
+    #
+    #         for update_id in list(self.updated_events.keys()):
+    #             if update_id.startswith("non-sync"):
+    #                 if update_id in self.created_events:
+    #                     plugin.log_warn(f'updates for {update_id} are ignored as the main event is not synced')
+    #                     continue
+    #                 else:
+    #                     plugin.log_error(
+    #                         f"{update_id} is an unknown un-synced event. this should not have happened. removing...")
+    #                     self.updated_events.pop(update_id)
+    #                     continue
+    #             updated = self.updated_events[update_id]
+    #             last_change = updated[-1]
+    #             upd_event = last_change['new_data']
+    #             ne = copy.deepcopy(upd_event)
+    #             ne.data.pop('synchronized')
+    #             moved_from = None if updated[0]['old_calendar'] == upd_event.calendar else updated[0]['old_calendar']
+    #             synced = plugin.update_event(ne, moved_from_calendar=moved_from,
+    #                                          days_in_future=12, days_in_past=1)
+    #             if synced.is_synchronized():
+    #                 self.updated_events.pop(update_id)
+    #                 plugin.log_info('successfully updated ', upd_event.data)
+    #                 # self.display_new_event(synced)
+    #                 events_to_display.append(synced)
+    #             else:
+    #                 plugin.log_info('could not update. kept in cache', upd_event)
+    #                 # self.display_new_event(upd_event)
+    #                 events_to_display.append(upd_event)
+    #
+    #         for deleted in list(self.deleted_events):
+    #             plugin.log_info('DELETED EVENT: ', deleted.data)
+    #
+    #             if plugin.delete_event(deleted):
+    #                 plugin.log_info('successfully deleted')
+    #                 # self.event_cache['delete'].remove(deleted)
+    #
+    #             else:
+    #                 plugin.log_info('could not delete. kept in cache', deleted.data)
+    #                 # self.view.remove_event(deleted.id)
+    #                 events_to_remove.append(deleted.id)
+    #         # self.__data__['event_cache'] = self.event_cache
+    #         # self._save_data()
+    #         plugin.log_info('got myself some cache:', self.__repr__())
+    #
+    #     except KeyError:
+    #         plugin.log_warn('no event cache yet. might get initialized in the future...')
+    #     return events_to_display, events_to_remove

@@ -8,13 +8,13 @@ from typing import Union, List
 from credentials import NoCredentialsSetException
 from plugins.base import BasePlugin
 from plugins.calendarplugin.caldav.cal_dav import CalDavPlugin
-from plugins.calendarplugin.calendar_plugin import CalendarPlugin, Event, CalendarData, Calendar
+from plugins.calendarplugin.calendar_plugin import CalendarPlugin, Event, CalendarData, Calendar, EventInstance
+# from plugins.calendarplugin.web_cal.web_cal import WebCalPlugin
 from plugins.climacell.climacell import ClimacellPlugin
 from plugins.location.location_plugin import LocationPlugin
 from plugins.location.mapquest_location_plugin import MapQuestLocationPlugin
 from plugins.weather.weather_plugin import WeatherPlugin, WeatherReport
 from widgets.base import BaseWidget
-from plugins.calendarplugin.google.google_calendar import GoogleCalendarPlugin
 from PyQt5.QtGui import QColor, QIcon, QResizeEvent, QMouseEvent, QPainter, QBrush, QPen
 from PyQt5.QtCore import Qt, QDateTime
 from PyQt5.QtWidgets import QHBoxLayout, QAction, QMessageBox, QLabel, QMenu, QApplication
@@ -44,7 +44,7 @@ class CalendarWidget(BaseWidget):
         self.end_hour = 24
         self.events = []
         self.weather_data = None  # type: Union[None, WeatherReport]
-        self.calendar_data = None  # type: Union[None, CalendarData]
+        self.calendar_data = {}  # type: Dict[str, Union[None, CalendarData]]
         self.event_cache = {'create': [], 'delete': [], 'update': {}}
         self.location = {}
         self.calendar_filter = []
@@ -55,7 +55,8 @@ class CalendarWidget(BaseWidget):
         self.settings_switcher['start_hour'] = (setattr, ['self', 'key', 'value'], int)
         self.settings_switcher['end_hour'] = (setattr, ['self', 'key', 'value'], int)
 
-        self.cal_plugin = None  # type: Union[None, CalendarPlugin]
+        self.cal_plugins = {}  # type: Dict[str, Union[None, CalendarPlugin]]
+        self.cal_plugin = None  # type:  Union[None, CalendarPlugin]
         self.weather_plugin = None  # type: Union[None, WeatherPlugin]
         self.location_plugin = None  # type: Union[None, LocationPlugin]
         self.updating_calendars = False
@@ -147,21 +148,30 @@ class CalendarWidget(BaseWidget):
 
     def forward(self):
         self.start_date += timedelta(days=self.days)
+        self.async_update_calendars(cache_mode=CalendarPlugin.CacheMode.ALLOW_CACHE)
         self.view.refresh(self.days, self.start_date, self.start_hour, self.end_hour)
         self.view.set_filter(self.calendar_filter)
         self.update_view()
 
     def backward(self):
         self.start_date -= timedelta(days=self.days)
+        self.async_update_calendars(cache_mode=CalendarPlugin.CacheMode.ALLOW_CACHE)
         self.view.refresh(self.days, self.start_date, self.start_hour, self.end_hour)
         self.view.set_filter(self.calendar_filter)
         self.update_view()
 
     def jump_to_today(self):
         self.start_date = self.initial_start_date
+        self.async_update_calendars(cache_mode=CalendarPlugin.CacheMode.ALLOW_CACHE)
         self.view.refresh(self.days, self.start_date, self.start_hour, self.end_hour)
         self.view.set_filter(self.calendar_filter)
         self.update_view()
+
+    def get_display_days_in_past(self) -> int:
+        return max((datetime.now().date() - self.start_date).days, 0) + 1
+
+    def get_display_days_in_future(self) -> int:
+        return self.days + (self.start_date - datetime.now().date()).days + 5
 
     def check_update(self):
         if self.initial_start_date == self.start_date and \
@@ -207,21 +217,25 @@ class CalendarWidget(BaseWidget):
         self.hour_range_select_action.set_range(0, 24)
         self.hour_range_select_action.value_changed.connect(lambda x, y: self.change_hour_range(x, y))
         self.select_calendars_action.selection_changed.connect(self.update_calendar_filter)
-        self.new_event_action.triggered.connect(self.create_new_event)
-        self.refresh_weather_action.triggered.connect(self.async_update_weather)
-        self.refresh_calendar_action.triggered.connect(self.async_update_calendars)
-        self.pick_location_action.triggered.connect(self.pick_location)
+        self.new_event_action.triggered.connect(lambda: self.create_new_event())
+        self.refresh_weather_action.triggered.connect(lambda: self.async_update_weather())
+        self.refresh_calendar_action.triggered.connect(lambda: self.async_update_calendars(
+            cache_mode=CalendarPlugin.CacheMode.FORCE_REFRESH))
+        self.pick_location_action.triggered.connect(lambda: self.pick_location())
 
         self.register_plugin(CalendarWidget.DEFAULT_PLUGINS[CalendarPlugin], 'cal_plugin')
+        # self.register_plugin(WebCalPlugin, 'web_cal_plugin')
         self.register_plugin(CalendarWidget.DEFAULT_PLUGINS[WeatherPlugin], 'weather_plugin')
         self.register_plugin(CalendarWidget.DEFAULT_PLUGINS[LocationPlugin], 'location_plugin')
+        self.cal_plugins[self.cal_plugin.__class__.__name__] = self.cal_plugin
+        # self.cal_plugins[self.web_cal_plugin.__class__.__name__] = self.web_cal_plugin
         if self.location:
             self.weather_plugin.set_location(self.location)
         self.view.refresh(self.days, self.start_date, self.start_hour, self.end_hour)
         self.view.set_filter(self.calendar_filter)
 
         self.update_view()
-        self.async_update_calendars()
+        self.async_update_calendars(cache_mode=CalendarPlugin.CacheMode.REFRESH_LATER)
         self.async_update_weather()
 
         self.try_to_apply_cache()
@@ -236,8 +250,11 @@ class CalendarWidget(BaseWidget):
                 temp_id = ne.data.pop('id')
                 ne.data.pop('synchronized')
                 ne.id = None
-                synced = self.cal_plugin.create_event(ne)
-                if synced.is_synchronized():
+                synced = self.cal_plugin.create_event(ne,
+                                                      days_in_future=self.get_display_days_in_future(),
+                                                      days_in_past=self.get_display_days_in_past())
+                if (isinstance(synced, list) and synced[0].instance.is_synchronized) or \
+                        (isinstance(synced, Event) and synced.is_synchronized):
                     self.event_cache['create'].remove(new_event)
                     self.log_info('successfully created ', new_event.data)
                     self.display_new_event(synced)
@@ -258,7 +275,8 @@ class CalendarWidget(BaseWidget):
                         self.log_warn(f'updates for {update_id} are ignored as the main event is not synced')
                         continue
                     else:
-                        self.log_error(f"{update_id} is a non-synced event without creation this should not have happend. removing...")
+                        self.log_error(
+                            f"{update_id} is a non-synced event without creation this should not have happend. removing...")
                         self.event_cache['update'].pop(update_id)
                         continue
                 updated = self.event_cache['update'][update_id]
@@ -266,9 +284,15 @@ class CalendarWidget(BaseWidget):
                 upd_event = last_change['new_data']
                 ne = copy.deepcopy(upd_event)
                 ne.data.pop('synchronized')
-                moved_from = None if updated[0]['old_calendar'].id == upd_event.calendar.id else updated[0]['old_calendar']
-                synced = self.cal_plugin.update_event(ne, moved_from_calendar=moved_from)
-                if synced.is_synchronized():
+                moved_from = None if updated[0]['old_calendar'].id == upd_event.calendar.id else updated[0][
+                    'old_calendar']
+                synced = self.cal_plugin.update_event(ne,
+                                                      days_in_future=self.get_display_days_in_future(),
+                                                      days_in_past=self.get_display_days_in_past(),
+                                                      moved_from_calendar=moved_from)
+
+                if (isinstance(synced, list) and synced[0].instance.is_synchronized) or \
+                        (isinstance(synced, Event) and synced.is_synchronized):
                     self.event_cache['update'].pop(update_id)
                     self.log_info('successfully updated ', upd_event.data)
                     self.display_new_event(synced)
@@ -334,31 +358,33 @@ class CalendarWidget(BaseWidget):
             self.update_weather()
         if isinstance(plugin, CalendarPlugin):
             if data is not None:
-                self.calendar_data = data
-                # self.widget_updated.emit('calendar_data', self.calendar_data)
-                self.__data__['calendar_data'] = self.calendar_data
-                self._save_data()
+                self.calendar_data[plugin.__class__.__name__] = data
             self.update_view()
             self.try_to_apply_cache()
 
     def update_view(self):
         self.view.remove_all()
         if self.calendar_data is not None:
-            self.view.add_events(self.calendar_data.events)
-            self.select_calendars_action.set_list([(c.name, c.name not in self.calendar_filter)
-                                                   for c_id, c in self.calendar_data.calendars.items()])
+            cal_actions = []
+            for account, cal_data in self.calendar_data.items():
+                self.view.add_events(cal_data.events)
+                cal_actions.extend([(c.name, c.name not in self.calendar_filter)
+                                    for c_id, c in cal_data.calendars.items()])
+            self.select_calendars_action.set_list(cal_actions)
 
         self.update_weather()
         self.refresh_calendar_action.setEnabled(True)
         self.updating_calendars = False
         self.update()
 
-    def async_update_calendars(self):
+    def async_update_calendars(self, cache_mode=CalendarPlugin.CacheMode.FORCE_REFRESH):
         if not self.updating_calendars:
             self.updating_calendars = True
             self.refresh_calendar_action.setEnabled(False)
-            self.cal_plugin.update_async(days_in_future=self.days + (self.start_date - datetime.now().date()).days + 5,
-                                         days_in_past=max((datetime.now().date() - self.start_date).days, 0) + 1)
+            for cal_plugin in self.cal_plugins.values():
+                cal_plugin.update_async(days_in_future=self.get_display_days_in_future(),
+                                        days_in_past=self.get_display_days_in_past(),
+                                        cache_mode=cache_mode)
 
     def async_update_weather(self):
         if not self.updating_weather:
@@ -366,21 +392,34 @@ class CalendarWidget(BaseWidget):
             self.refresh_weather_action.setEnabled(False)
             self.weather_plugin.update_async()
 
-    def create_event_editor(self):
-        return EventEditor(self, [c for c_id, c in self.calendar_data.calendars.items()
+    def create_event_editor(self, plugin=None):
+        if plugin is None:
+            plugin = self.cal_plugin.__class__.__name__
+        return EventEditor(self, [c for c_id, c in self.calendar_data[plugin].calendars.items()
                                   if c.name not in self.calendar_filter],
-                           self.calendar_data.colors)
+                           self.calendar_data[plugin].colors)
 
     def _clear_rect(self):
         self.mouse_down_loc = None
         self.mouse_cur_loc = None
 
-    def create_new_event(self, start=None, end=None):
+    def create_new_event(self, start=None, end=None, plugin=None):
+        if plugin is None:
+            plugin = self.cal_plugin
+        plugin_name = plugin.__class__.__name__
 
         def handle_new_event(event: Event):
             self._clear_rect()
-            event = self.cal_plugin.create_event(event)
-            if not event.is_synchronized():
+            new_event = self.cal_plugin.create_event(event,
+                                                     days_in_future=self.get_display_days_in_future(),
+                                                     days_in_past=self.get_display_days_in_past()
+                                                     )
+            if (isinstance(new_event, list) and new_event[0].instance.is_synchronized()) or \
+                    (isinstance(new_event, Event) and new_event.is_synchronized()):
+                print('hello', new_event)
+                self.display_new_event(new_event)
+                pass
+            else:
                 self.log_warn('EVENT CREATION FAILED! TODO: CACHE NEW EVENTS UNTIL CONNECTION IS RE-ESTABLISHED!!')
                 self.display_new_event(event)
                 self.event_cache['create'].append(event)
@@ -388,11 +427,6 @@ class CalendarWidget(BaseWidget):
                 self.__data__['event_cache'] = self.event_cache
                 self._save_data()
                 return
-            self.calendar_data.events[event.get_unique_instance_id()] = event
-            self.__data__['calendar_data'] = self.calendar_data
-            self._save_data()
-
-            self.display_new_event(event)
 
         if self.calendar_data is not None:
             self.event_editor = self.create_event_editor()
@@ -404,50 +438,72 @@ class CalendarWidget(BaseWidget):
                 self.event_editor.set_time(start, end)
             self.event_editor.show()
 
-    def display_new_event(self, event):
-        self.view.add_events({event.id: event})
+    def display_new_event(self, event: Union[Event, List[EventInstance]]):
+        if isinstance(event, Event):
+            self.view.add_events({event.id: event})
+        else:
+            self.view.add_events({event[0].root_event.id: event})
 
-    def delete_event(self, requesting_widget: CalendarEventWidget):
-        if requesting_widget.event.recurrence:
-            quit_msg = '"%s" is a recurring Event.' % requesting_widget.event.title
-            mb = CustomMessageBox(QMessageBox.Question, f"Do you want to delete all instances?", quit_msg,
+    def delete_event(self, requesting_widget: CalendarEventWidget, plugin=None):
+        if plugin is None:
+            plugin = self.cal_plugin
+        plugin_name = plugin.__class__.__name__
+        if requesting_widget.root_event().recurrence:
+            header = '"%s" is a recurring Event.' % requesting_widget.root_event().title
+            mb = CustomMessageBox(QMessageBox.Question, header, f"Do you want to delete all instances of "
+                                                                f"{requesting_widget.root_event().title}?",
                                   QMessageBox.Yes | QMessageBox.No)
             mb.setWindowIcon(QIcon(PathManager.get_icon_path('delete_event.png')))
             mb.move(self.mapToGlobal(requesting_widget.pos()))
             reply = mb.exec()
-            if reply != QMessageBox.Yes:
+            if reply == QMessageBox.Yes:
+                pass
+            elif reply == QMessageBox.No:
+                quit_msg = 'Do you want to delete the instance "%s"?' % requesting_widget.event_instance().title
+                mb = CustomMessageBox(QMessageBox.Question, f"Are you sure?", quit_msg,
+                                      QMessageBox.Yes | QMessageBox.No)
+                mb.setWindowIcon(QIcon(PathManager.get_icon_path('delete_event.png')))
+                mb.move(self.mapToGlobal(requesting_widget.pos()))
+                reply = mb.exec()
+                if reply == QMessageBox.Yes:
+                    new_events = self.cal_plugin.delete_event_instance(requesting_widget.event,
+                                                                       days_in_future=self.get_display_days_in_future(),
+                                                                       days_in_past=self.get_display_days_in_past())
+                    self.display_new_event(new_events)
+                return
+            else:
                 return
 
-        quit_msg = 'Do you want to delete "%s"?' % requesting_widget.event.title
+        quit_msg = 'Do you want to delete "%s"?' % requesting_widget.root_event().title
         mb = CustomMessageBox(QMessageBox.Question, f"Are you sure?", quit_msg,
                               QMessageBox.Yes | QMessageBox.No)
         mb.setWindowIcon(QIcon(PathManager.get_icon_path('delete_event.png')))
         mb.move(self.mapToGlobal(requesting_widget.pos()))
         reply = mb.exec()
         if reply == QMessageBox.Yes:
-            self.log_info('TRYING TO DELETE:', requesting_widget.event.__dict__)
-            if not requesting_widget.event.is_synchronized():
+            self.log_info('TRYING TO DELETE:', requesting_widget.root_event().__dict__)
+            if not requesting_widget.root_event().is_synchronized():
                 self.log_warn('trying to delete un-synchronized event')
-                requesting_widget.delete_signal.emit(requesting_widget.event.id, None)
-                self.event_cache['create'].remove(requesting_widget.event)
+                requesting_widget.delete_signal.emit(requesting_widget.root_event().id, None)
+                self.event_cache['create'].remove(requesting_widget.root_event())
                 self.__data__['event_cache'] = self.event_cache
                 self._save_data()
                 requesting_widget.log_debug(self.event_cache)
             else:
                 self.log_warn('trying to delete synchronized event')
-                if self.cal_plugin.delete_event(requesting_widget.event):
-                    requesting_widget.delete_signal.emit(requesting_widget.event.id, None)
-                    self.calendar_data.events.pop(requesting_widget.event.get_unique_instance_id())
+                if self.cal_plugin.delete_event(requesting_widget.root_event()):
+                    requesting_widget.delete_signal.emit(requesting_widget.root_event().id, None)
+                    self.calendar_data[plugin_name].events.pop(requesting_widget.root_event().id)
                     # self.widget_updated.emit('calendar_data', self.calendar_data)
-                    self.__data__['calendar_data'] = self.calendar_data
-                    self._save_data()
+                    # self.__data__['calendar_data'][plugin_name] = self.calendar_data[plugin_name]
+                    # self._save_data()
                 else:
                     self.log_warn('deletion failed. saving in cache')
-                    self.event_cache['delete'].append(requesting_widget.event)
+                    self.event_cache['delete'].append(requesting_widget.root_event())
                     self.__data__['event_cache'] = self.event_cache
                     self._save_data()
                     requesting_widget.log_debug(self.event_cache)
-                    requesting_widget.delete_signal.emit(requesting_widget.event.id, None)
+                    requesting_widget.delete_signal.emit(requesting_widget.root_event().id, None)
 
     def all_instance_check(self, requesting_widget: CalendarEventWidget):
         edit_msg = 'Do you want to edit all instances?'
@@ -462,11 +518,16 @@ class CalendarWidget(BaseWidget):
     def make_update_to_event(self, event: Event, old_calendar: Union[None, Calendar],
                              requesting_widget: CalendarEventWidget):
 
-        if event.calendar.id != old_calendar.id:
-            updated_event = self.cal_plugin.update_event(event, old_calendar)
+        updated_event = self.cal_plugin.update_event(event,
+                                                     days_in_future=self.get_display_days_in_future(),
+                                                     days_in_past=self.get_display_days_in_past(),
+                                                     moved_from_calendar=old_calendar if
+                                                     event.calendar.id != old_calendar.id else None)
+
+        if (isinstance(updated_event, list) and updated_event[0].instance.is_synchronized) or \
+                (isinstance(updated_event, Event) and updated_event.is_synchronized):
+            pass
         else:
-            updated_event = self.cal_plugin.update_event(event)
-        if not updated_event.is_synchronized():
             self.log_warn('trying to update non-synchronized event ', updated_event.__dict__)
             up_cache = self.event_cache['update']
             if updated_event.id not in up_cache.keys():
@@ -478,7 +539,7 @@ class CalendarWidget(BaseWidget):
         if requesting_widget:
             try:
                 requesting_widget.log_debug(self.event_cache)
-                requesting_widget.delete_signal.emit(requesting_widget.event.id, updated_event)
+                requesting_widget.delete_signal.emit(requesting_widget.root_event().id, updated_event)
             except RuntimeError as e:
                 self.log_error(f'CRITICAL ERROR: {e}')
 
@@ -490,8 +551,7 @@ class CalendarWidget(BaseWidget):
             reply = self.all_instance_check(requesting_widget)
             if reply == QMessageBox.Yes:
                 self.event_editor = self.create_event_editor()
-                #self.event_editor.set_event(self.cal_plugin.get_recurring_event(requesting_widget.event))
-                self.event_editor.set_event(requesting_widget.event)
+                self.event_editor.set_event(requesting_widget.root_event())
             elif reply == QMessageBox.No:
                 self.event_editor = self.create_event_editor()
                 ev = copy.deepcopy(requesting_widget.event)
@@ -506,52 +566,76 @@ class CalendarWidget(BaseWidget):
         def update_event(event):
             self.make_update_to_event(event, old_calendar, requesting_widget)
 
-        old_calendar = requesting_widget.event.calendar
+        old_calendar = requesting_widget.root_event().calendar
         self.event_editor.accepted.connect(update_event)
         self.event_editor.show()
 
     def rescale_event(self, requesting_widget: CalendarEventWidget,
                       new_start: Union[datetime, date], new_end: Union[datetime, date],
                       edit_start=False):
-        if requesting_widget.recurring:
-            reply = self.all_instance_check(requesting_widget)
-            # TODO: IMPLEMENT THIS FINALLY!!
-            requesting_widget.parent().resizeEvent(QResizeEvent(requesting_widget.parent().size(),
-                                                                requesting_widget.parent().size()))
+        print('RESCALE', requesting_widget, new_start, new_end)
 
-            return
+        requesting_event = requesting_widget.event
+
+        if isinstance(requesting_event, EventInstance):
+            # only allow all-instance editing for now....
+            # comment in to change. might be buggy
+
+            # reply = self.all_instance_check(requesting_widget)
+
             # if reply == QMessageBox.Yes:
-            #     self.event_editor = EventEditor(self, self.calendars)
-            #     self.event_editor.set_event(self.calendar_plugin.get_recurring_event(requesting_widget.event))
+            #     # EDIT THE ROOT EVENT!
+            #     event_to_edit = requesting_event.root_event
+            #     event_instance = requesting_event.root_event
             # elif reply == QMessageBox.No:
-            #     self.event_editor = EventEditor(self, self.calendars)
-            #     self.event_editor.set_event(requesting_widget.event)
+
+            # EDIT SUBCOMPONENT ONLY!
+            event_to_edit = requesting_event
+            event_instance = requesting_event.instance
+
             # else:
+            #     requesting_widget.parent().resizeEvent(QResizeEvent(requesting_widget.parent().size(),
+            #                                                         requesting_widget.parent().size()))
             #     return
+        else:
+            # NORMAL EVENT
+            event_to_edit = requesting_event
+            event_instance = requesting_event
 
-        def update_event(event: Event):
-            if event.all_day:
-                event.start = datetime.combine(new_start, datetime.min.time())
-                event.end = datetime.combine(new_end, datetime.min.time())
+        def update_event(event: Union[Event, EventInstance]):
+            if isinstance(event, EventInstance):
+                if event.instance_id not in event.root_event.subcomponents:
+                    # we need to create a subcomponent. easy as that.
+                    event.root_event.subcomponents[event.instance_id] = event.instance
+
+                # subcomponent exists now! we only need to edit it :)
+                to_edit = event.root_event.subcomponents[event.instance_id]
+                root_event = event.root_event
             else:
-                event.start = new_start
-                event.end = new_end
-            self.make_update_to_event(event, event.calendar, requesting_widget)
+                to_edit = root_event = event
 
-        if not requesting_widget.event.all_day:
-            edit_msg = f"Do you want to reschedule to " \
+            if to_edit.all_day:
+                to_edit.start = datetime.combine(new_start, datetime.min.time())
+                to_edit.end = datetime.combine(new_end, datetime.min.time())
+            else:
+                to_edit.start = new_start
+                to_edit.end = new_end
+            self.make_update_to_event(root_event, root_event.calendar, requesting_widget)
+
+        if not event_instance.all_day:
+            edit_msg = f"Do you want to reschedule {event_instance.title} to " \
                        f"{new_start.hour:02d}:{new_start.minute:02d} - {new_end.hour:02d}:{new_end.minute:02d}?"
         else:
-            edit_msg = f"Do you want to reschedule to " \
+            edit_msg = f"Do you want to reschedule {event_instance.title} to " \
                        f"{new_start.day:02d}.{new_start.month:02d}. - {new_end.day:02d}.{new_end.month:02d}.?"
-        mb = CustomMessageBox(QMessageBox.Question, f"Edit {requesting_widget.summary}",
+        mb = CustomMessageBox(QMessageBox.Question, f"Edit {event_instance.title}",
                               edit_msg,
                               QMessageBox.Yes | QMessageBox.No)
         mb.setWindowIcon(QIcon(PathManager.get_icon_path('edit_event.png')))
         mb.move(self.mapToGlobal(requesting_widget.pos()))
         reply = mb.exec()
         if reply == QMessageBox.Yes:
-            update_event(requesting_widget.event)
+            update_event(event_to_edit)
         elif reply == QMessageBox.No:
             requesting_widget.parent().resizeEvent(QResizeEvent(requesting_widget.parent().size(),
                                                                 requesting_widget.parent().size()))
