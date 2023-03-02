@@ -3,6 +3,7 @@ import re
 import uuid
 from typing import List, Union, Dict
 
+from dateutil.tz import tzlocal
 from tzlocal import get_localzone
 import caldav
 import icalendar
@@ -10,7 +11,6 @@ import pytz
 
 import recurring_ical_events
 import vobject
-from PyQt5.QtCore import QTimeZone
 from PyQt5.QtGui import QColor
 from dateutil import rrule
 from vobject.icalendar import RecurringComponent
@@ -125,7 +125,7 @@ class CalDavConversions:
                     for sub in sub_components})
         else:
             return CalDavConversions.event_from_recurring_component(vobject_instance.vevent, calendar,
-                                                                          vobject_instance.vevent.rruleset)
+                                                                    vobject_instance.vevent.rruleset)
 
     @classmethod
     def event_from_recurring_component(cls, ev: RecurringComponent, calendar: Calendar,
@@ -150,7 +150,7 @@ class CalDavConversions:
             trigger = valarm.trigger.value
             action = valarm.action.value
             desc = valarm.description.value if hasattr(valarm, 'description') else None
-            alarmtime = start.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode())) + trigger
+            alarmtime = start.astimezone(tzlocal()) + trigger
             alarm = Alarm(alarmtime, trigger, desc, action)
             # self.log(f'{trigger}, {alarmtime} {action}, {desc}')
 
@@ -162,8 +162,8 @@ class CalDavConversions:
                                          hour=dt.hour, minute=dt.minute, second=dt.second) for dt in rruleset._exdate]
         return Event(event_id=ev.uid.value if cls.UID in ev.contents else '',
                      title=ev.summary.value if cls.SUMMARY in ev.contents else '',
-                     start=start.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode())),
-                     end=end.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode())),
+                     start=start.astimezone(tzlocal()),
+                     end=end.astimezone(tzlocal()),
                      description=ev.description.value if cls.DESCRIPTION in ev.contents else '',
                      location=ev.location.value if cls.LOCATION in ev.contents else '',
                      all_day=all_day,
@@ -205,12 +205,11 @@ class CalDavConversions:
         expandable_event = raw_event.vobject_instance.vevent
         if expandable_event.rruleset:
             root_event = cls.event_from_vobject_instance(raw_event.vobject_instance, event.calendar)
-            return cls.expand_event(root_event,
-                                                  raw_event.icalendar_instance,
-                                                  start=datetime.datetime.now().replace(tzinfo=pytz.UTC) -
-                                                        datetime.timedelta(days=days_in_past),
-                                                  end=datetime.datetime.now().replace(tzinfo=pytz.UTC) +
-                                                      datetime.timedelta(days=days_in_future))
+            return cls.expand_event(root_event, raw_event.icalendar_instance,
+                                    start=datetime.datetime.now().replace(tzinfo=tzlocal()) -
+                                    datetime.timedelta(days=days_in_past),
+                                    end=datetime.datetime.now().replace(tzinfo=tzlocal()) +
+                                    datetime.timedelta(days=days_in_future))
         else:
             return cls.event_from_recurring_component(expandable_event, event.calendar)
 
@@ -233,16 +232,16 @@ class CalDavConversions:
                 trigger = alarm.trigger.value
                 action = alarm.action.value
                 desc = alarm.description.value
-                alarmtime = due.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode())) + trigger
+                alarmtime = due.astimezone(tzlocal()) + trigger
                 # self.log(f'TODO-ALARM: {trigger}, {alarmtime} {action}, {desc}')
         else:
             due = None
 
         return Todo(todo_id=td.uid.value if cls.UID in td.contents else '',
                     title=td.summary.value if cls.SUMMARY in td.contents else '',
-                    start=start.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode())) if start else
+                    start=start.astimezone(tzlocal()) if start else
                     None,
-                    due=due.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode())) if due else None,
+                    due=due.astimezone(tzlocal()) if due else None,
                     description=td.description.value if cls.DESCRIPTION in td.contents else '',
                     location=td.location.value if cls.LOCATION in td.contents else '',
                     categories=[c for c in td.categories.value] if cls.CATEGORIES in td.contents else [],

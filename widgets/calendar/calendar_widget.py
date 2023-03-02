@@ -5,6 +5,8 @@ import math
 from datetime import datetime, date, timedelta
 from typing import Union, List
 
+from dateutil.tz import tzlocal
+
 from credentials import NoCredentialsSetException
 from plugins.base import BasePlugin
 from plugins.calendarplugin.caldav.cal_dav import CalDavPlugin
@@ -17,7 +19,7 @@ from plugins.weather.weather_plugin import WeatherPlugin, WeatherReport
 from widgets.base import BaseWidget
 from PyQt5.QtGui import QColor, QIcon, QResizeEvent, QMouseEvent, QPainter, QBrush, QPen
 from PyQt5.QtCore import Qt, QDateTime
-from PyQt5.QtWidgets import QHBoxLayout, QAction, QMessageBox, QLabel, QMenu, QApplication
+from PyQt5.QtWidgets import QHBoxLayout, QAction, QMessageBox, QLabel, QMenu
 
 from widgets.calendar.calendar_event import CalendarEventWidget
 from widgets.calendar.event_editor import EventEditor
@@ -174,17 +176,22 @@ class CalendarWidget(BaseWidget):
         return self.days + (self.start_date - datetime.now().date()).days + 5
 
     def check_update(self):
+        now = datetime.now()
+
         if self.initial_start_date == self.start_date and \
-                self.view.start_date != datetime.now().date() and not self.updating_calendars:
-            self.initial_start_date = self.start_date = datetime.now().date()
+                self.view.start_date != now.date() and not self.updating_calendars:
+            # update view if day changed at midnight
+            # (provided the view was on the current day)
+            self.initial_start_date = self.start_date = now.date()
             self.view.refresh(self.days, self.start_date, self.start_hour, self.end_hour)
             self.view.set_filter(self.calendar_filter)
             self.async_update_weather()
             self.async_update_calendars()
         else:
-            if self.cal_plugin.last_update + timedelta(hours=1) < datetime.now():
+            # update plugins every hour
+            if self.cal_plugin.last_update + timedelta(hours=1) < now:
                 self.async_update_calendars()
-            if self.weather_plugin.last_update + timedelta(hours=1) < datetime.now():
+            if self.weather_plugin.last_update + timedelta(hours=1) < now:
                 self.async_update_weather()
         self.update()
 
@@ -493,7 +500,7 @@ class CalendarWidget(BaseWidget):
                 self.log_warn('trying to delete synchronized event')
                 if self.cal_plugin.delete_event(requesting_widget.root_event()):
                     requesting_widget.delete_signal.emit(requesting_widget.root_event().id, None)
-                    self.calendar_data[plugin_name].events.pop(requesting_widget.root_event().id)
+                    self.calendar_data[plugin_name].events.pop(requesting_widget.root_event().id, None)
                     # self.widget_updated.emit('calendar_data', self.calendar_data)
                     # self.__data__['calendar_data'][plugin_name] = self.calendar_data[plugin_name]
                     # self._save_data()

@@ -221,11 +221,12 @@ class MultiDayView(Widget):
                 hour = int(math.floor(hr))
                 minute = int(round((hr - hour) * 60))
                 day = widget.day
+                hour += + self.start_hour
                 if hour > 23:
                     hour = 0
                     minute = 0
                     day = widget.day + timedelta(days=1)
-                return datetime.combine(day, d_time(hour=hour+self.start_hour, minute=minute))
+                return datetime.combine(day, d_time(hour=hour, minute=minute))
             start_time = get_date_time(start.y(), start_w)
             end_time = get_date_time(end.y(), end_w)
             return start_time, end_time

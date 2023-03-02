@@ -1,3 +1,4 @@
+import datetime
 import logging
 import math
 from datetime import date, timedelta
@@ -118,9 +119,11 @@ class AllDayWidget(TimelineWidget):
                                   )
                             )
             day = (self.start_date + timedelta(days=d))
-            if day.weekday() == 6:
+            if day == datetime.date.today():
+                painter.setPen(QPen(QColor(250, 170, 0)))
+            elif day.weekday() == 6:  # SUNDAY
                 painter.setPen(QPen(QColor(255, 0, 0)))
-            elif day.weekday() == 5:
+            elif day.weekday() == 5:  # SATURDAY
                 painter.setPen(QPen(QColor(255, 100, 100)))
             else:
                 painter.setPen(QPen(QColor(255, 255, 255)))

@@ -2,12 +2,12 @@ import datetime
 import uuid
 from typing import Dict, Any, Union, List
 
-import pytz
 import requests.exceptions
 import urllib3.exceptions
 from PyQt5.QtGui import QColor
 from caldav import Principal
 from caldav.lib.error import AuthorizationError
+from dateutil.tz import tzlocal
 
 from requests.exceptions import SSLError
 
@@ -107,9 +107,9 @@ class CalDavPlugin(CalendarPlugin):
             self.update_async(days_in_future=days_in_future, days_in_past=days_in_past, *args, **kwargs,
                               cache_mode=CalendarPlugin.CacheMode.FORCE_REFRESH)
         return CalendarData(
-            events=self.expand_events(start=datetime.datetime.now().replace(tzinfo=pytz.UTC) -
+            events=self.expand_events(start=datetime.datetime.now().replace(tzinfo=tzlocal()) -
                                       datetime.timedelta(days=days_in_past),
-                                      end=datetime.datetime.now().replace(tzinfo=pytz.UTC) +
+                                      end=datetime.datetime.now().replace(tzinfo=tzlocal()) +
                                       datetime.timedelta(days=days_in_future)),
             calendars={c_id: c.calendar for c_id, c in self.caldav_calendars.items()},
             colors=self.get_event_colors()
@@ -125,6 +125,8 @@ class CalDavPlugin(CalendarPlugin):
             event_to_create = CalDavConversions.caldav_event_from_event(
                 event, self.caldav_calendars[event.calendar.id].caldav_cal)
             raw_created_event = event_to_create.save()
+            self.caldav_calendars[event.calendar.id].register_update(raw_created_event.url)
+            self.save_data()
             return CalDavConversions.expand_caldav_event(raw_created_event, event, days_in_future, days_in_past)
         except Exception as e:
             print(e)
@@ -139,11 +141,14 @@ class CalDavPlugin(CalendarPlugin):
             event_to_delete = CalDavConversions.caldav_event_from_event(
                 event, self.caldav_calendars[event.calendar.id].caldav_cal)
             event_to_delete.delete()
+            self.caldav_calendars[event.calendar.id].register_delete(event_to_delete)
+            self.save_data()
             return True
         except Exception as e:
             self.log_warn(e)
             return True
 
+    # todo: move back to generic implementation, as this code is not plugin-specific
     def delete_event_instance(self, instance: EventInstance,
                               days_in_future: int, days_in_past: int) -> Union[Event, List[EventInstance]]:
         self.log(f'trying to delete {instance.root_event.id} instance: {instance.instance_id}')
@@ -153,7 +158,7 @@ class CalDavPlugin(CalendarPlugin):
         if instance.instance_id in root_event.subcomponents:
             root_event.subcomponents.pop(instance.instance_id)
         # create exdate
-        exdate = datetime.datetime.strptime(instance.instance_id, '%Y%m%dT%H%M%SZ').replace(tzinfo=pytz.UTC)
+        exdate = datetime.datetime.strptime(instance.instance_id, '%Y%m%dT%H%M%SZ').replace(tzinfo=tzlocal())
         if root_event.exdates:
             root_event.exdates.append(exdate)
         else:
@@ -161,21 +166,32 @@ class CalDavPlugin(CalendarPlugin):
         # update root event
         return self.update_event(root_event, days_in_future=days_in_future, days_in_past=days_in_past)
 
+    def restore_excluded_date(self, root_event: Event, excluded_date: datetime.datetime,
+                              days_in_future: int, days_in_past: int) -> Union[Event, List[EventInstance]]:
+        if excluded_date in root_event.exdates:
+            root_event.exdates.remove(excluded_date)
+            return self.update_event(root_event, days_in_future=days_in_future, days_in_past=days_in_past)
+
     def update_event(self, event: Event,
                      days_in_future: int, days_in_past: int,
                      moved_from_calendar: Union[Calendar, None] = None) -> Union[Event, List[EventInstance]]:
         try:
+
+            ## TODO: CHECK IF WE NEED TO CHANGE THE ID FOR MOVED EVENTS!!!!!
             # 1) 'update, or copy to new calendar'
             edited_event = CalDavConversions.caldav_event_from_event(
                 event, self.caldav_calendars[event.calendar.id].caldav_cal)
             raw_edited_event = edited_event.save()
+            self.caldav_calendars[event.calendar.id].register_update(raw_edited_event.url)
 
             if moved_from_calendar is not None:
                 # 2) delete from old calendar
                 ev_2_del = CalDavConversions.caldav_event_from_event(
                     event, self.caldav_calendars[moved_from_calendar.id].caldav_cal)
                 ev_2_del.delete()
+                self.caldav_calendars[moved_from_calendar.id].register_delete(ev_2_del)
 
+            self.save_data()
             return CalDavConversions.expand_caldav_event(raw_edited_event, event, days_in_future, days_in_past)
 
         except caldav.error.NotFoundError as nfe:
@@ -187,8 +203,8 @@ class CalDavPlugin(CalendarPlugin):
             event.mark_desynchronized()
             return event
 
-    def update_event_instance(self, instance: EventInstance) -> Union[Event, List[EventInstance]]:
-        pass
+    def save_data(self):
+        SettingsStorage.save(self.caldav_calendars, 'caldav_cals')
 
     def get_event_colors(self) -> Dict[Any, Dict[str, QColor]]:
         bg_colors = {

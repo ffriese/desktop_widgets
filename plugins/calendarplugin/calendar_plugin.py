@@ -4,9 +4,8 @@ from enum import Enum
 from typing import Union, List, Dict, Any
 
 import dateutil.rrule
-import pytz
-from PyQt5.QtCore import QTimeZone
 from PyQt5.QtGui import QColor
+from dateutil.tz import tzlocal
 
 from plugins.base import BasePlugin
 
@@ -109,11 +108,14 @@ class Event:
         self.data['synchronized'] = False
         self._synchronized = False
 
+    def get_unique_id(self):
+        return f'{self.id}#{self.start.strftime("%Y%m%dT%H%M%SZ")}'
+
     def set_start_time(self, start_time: datetime):
-        self.start = start_time.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode()))
+        self.start = start_time.astimezone(tzlocal())
 
     def set_end_time(self, end_time: datetime):
-        self.end = end_time.astimezone(pytz.timezone(QTimeZone.systemTimeZoneId().data().decode()))
+        self.end = end_time.astimezone(tzlocal())
 
 
 class EventInstance:
@@ -199,8 +201,6 @@ class CalendarPlugin(BasePlugin):
                      ) -> Union[Event, List[EventInstance]]:
         raise NotImplementedError()
 
-    def update_event_instance(self, instance: EventInstance) -> Union[Event, List[EventInstance]]:
-        raise NotImplementedError
 
     def get_event_colors(self) -> Dict[Any, QColor]:
         raise NotImplementedError()

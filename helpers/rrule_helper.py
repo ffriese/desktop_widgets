@@ -54,13 +54,13 @@ class Frequencies(Selectable):
 # noinspection PyProtectedMember,SpellCheckingInspection
 def get_recurrence_text(recurrence: dateutil.rrule.rrule):
 
-    # workarounds for some limitations of the rrule-to-english package.
+    # workarounds for some limitations of the recurrent-package:
     # e.g., some invalid assumptions lead to unconverted rrules
     rec = dateutil.rrule.rrulestr(str(recurrence))
     if rec._freq == 2 and rec._original_rule['byweekday'] is None:
-        # add byweekday to original rule in weekly
+        # add byweekday to original rule in weekly reccurrences
         rec._original_rule['byweekday'] = tuple(weekday(wd) for wd in rec._byweekday)
-    rec_str = str(rec).replace('\n', ';')
+    # rec_str = str(rec).replace('\n', ';')
     rec_format = str(rrule_format(rec)).replace('\n', ';')
-    print(f'{rec_str} [freq:{rec._freq}, byday:{rec._byweekday}] -> {rec_format}  ........  {rec.__dict__}')
+    # print(f'{rec_str} [freq:{rec._freq}, byday:{rec._byweekday}] -> {rec_format}  ........  {rec.__dict__}')
     return rec_format
