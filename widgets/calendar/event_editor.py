@@ -1,16 +1,14 @@
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 
-import dateutil.rrule
 from PyQt5.QtCore import pyqtSignal, Qt, QTimeZone, QDateTime
 from PyQt5.QtGui import QIcon, QCloseEvent, QColor
 from PyQt5.QtWidgets import QWidget, QFormLayout, QLineEdit, QPushButton, QHBoxLayout, QComboBox, QCheckBox, \
-    QDateTimeEdit, QLabel, QSpinBox, QTextEdit, QMessageBox, QRadioButton, QButtonGroup
-from dateutil.rrule import rrulestr
+    QDateTimeEdit, QLabel, QTextEdit, QMessageBox, QRadioButton, QButtonGroup
 
 from helpers import styles
 from helpers.tools import PathManager
-from plugins.calendarplugin.calendar_plugin import Event, Calendar, CalendarAccessRole
+from plugins.calendarplugin.calendar_plugin import Event, Calendar, CalendarAccessRole, EventInstance
 from widgets.base import BaseWidget
 from widgets.tool_widgets import FilteringComboBox, EmojiPicker
 from widgets.tool_widgets.dialogs.custom_dialog import CustomWindow
@@ -205,33 +203,48 @@ class EventEditor(CustomWindow):
             self.time_diff = timedelta(
                     milliseconds=self.start_time.dateTime().msecsTo(self.end_time.dateTime()))
 
-    def set_event(self, event: Event):
-        self.setWindowTitle('Edit Event')
-        self.event = event
-        if self.event.recurrence is not None:
-            self.recurring.setChecked(True)
-            self.recurring_widget.set_recurrence(self.event.recurrence)
+    def root_event(self) -> Event:
+        if isinstance(self.event, Event):
+            return self.event
+        elif isinstance(self.event, EventInstance):
+            return self.event.root_event
 
+    def event_instance(self) -> Event:
+        if isinstance(self.event, Event):
+            return self.event
+        elif isinstance(self.event, EventInstance):
+            return self.event.instance
+
+
+    def set_event(self, event: Union[Event, EventInstance]):
+        self.setWindowTitle('Edit Event')
+
+        self.event = event
+
+        if isinstance(self.event, EventInstance):
+            rec_id = self.event_instance().recurring_event_id
+            print('recurring single instance, lock recurring settings')
+            self.recurring.setEnabled(False)
         else:
-            if self.event.is_recurring():
-                rec_id = self.event.recurring_event_id
-                print('recurring single instance, lock recurring settings')
-                self.recurring.setEnabled(False)
+            if self.root_event().recurrence is not None:
+                self.recurring.setChecked(True)
+                self.recurring_widget.set_recurrence(self.root_event().recurrence)
 
         # TODO: REUSE EMOJI PICKER
-        self.summary.setText(self.event.title)
-        icon, summary = EmojiPicker.split_summary(self.event.title)
+        self.summary.setText(self.event_instance().title)
+        icon, summary = EmojiPicker.split_summary(self.event_instance().title)
         self.summary.setText(summary)
         self.emoji_code = icon
         if icon is not None:
             self.icon_button.setIcon(EmojiPicker.get_emoji_icon_from_unicode(icon, 32))
 
-        self.start_time.setDateTime(self.event.start)
-        self.end_time.setDateTime(self.event.end)
-        self.all_day.setChecked(self.event.all_day)
-        self.location.setText(self.event.location)
-        if self.event.timezone is not None:
-            timezone = self.event.timezone.replace('GMT', 'UTC')
+        self.start_time.setDateTime(self.event_instance().start)
+        self.end_time.setDateTime((self.event_instance().end - timedelta(days=1)) if self.event_instance().all_day
+                                  else self.event_instance().end)
+        self.all_day.setChecked(self.event_instance().all_day)
+        self.location.setText(self.event_instance().location)
+        if self.event_instance().timezone is not None:
+            timezone = self.event_instance().timezone.replace('GMT', 'UTC')
             start = self.start_time.dateTime()
             end = self.end_time.dateTime()
             self.start_time.setDateTime(start.toTimeZone(QTimeZone(timezone.encode())))
@@ -239,17 +252,17 @@ class EventEditor(CustomWindow):
             self.timezone.setCurrentText(timezone)
 
         try:
-            self.description.setText(event.description)
+            self.description.setText(self.event_instance().description)
         except KeyError:
             pass
         try:
-            self.calendar.setCurrentText(event.calendar.name)
+            self.calendar.setCurrentText(self.event_instance().calendar.name)
         except KeyError:
             pass
-        if self.event.bg_color is not None:
+        if self.event_instance().bg_color is not None:
             self.custom_color_cb.setChecked(True)
             for color_id, color in self.event_colors.items():
-                if color_id is not None and color['bg_color'].name() == self.event.bg_color.name():
+                if color_id is not None and color['bg_color'].name() == self.event_instance().bg_color.name():
                     self.color_radio_buttons[color_id].setChecked(True)
 
     def _calendar_info_from_name(self, calendar_name):
@@ -284,7 +297,8 @@ class EventEditor(CustomWindow):
             event = Event(event_id=None,
                           title=event_title,
                           start=self.start_time.dateTime().toPyDateTime(),
-                          end=self.end_time.dateTime().toPyDateTime(),
+                          end=(self.end_time.dateTime().toPyDateTime() + timedelta(days=1)) if self.all_day.isChecked()
+                          else self.end_time.dateTime().toPyDateTime(),
                           location=self.location.text(),
                           description=self.description.toPlainText(),
                           all_day=self.all_day.isChecked(),
@@ -293,22 +307,43 @@ class EventEditor(CustomWindow):
                           bg_color=self.get_bg_color(),
                           recurrence=self.get_recurrence(),
                           data={})
+            self.accepted.emit(event)
         else:
-            event = self.event
-            event.title = event_title
-            event.location = self.location.text()
-            event.description = self.description.toPlainText()
-            event.timezone = self.timezone.currentText()
-            event.all_day = self.all_day.isChecked()
-            event.start = self.start_time.dateTime().toPyDateTime()
-            event.end = self.end_time.dateTime().toPyDateTime()
-            event.calendar = self.calendar_from_name(calendar_name=self.calendar.currentText())
-            event.bg_color = self.get_bg_color()
-            event.recurrence = self.get_recurrence()
 
-        # print( 'EVENT ACCEPT CURRENTLY DISABLED!!!!')
-        self.accepted.emit(event)
+            if isinstance(self.event, EventInstance):
+                if self.event.instance_id not in self.event.root_event.subcomponents:
+                    # we need to create a subcomponent. easy as that.
+                    self.event.root_event.subcomponents[self.event.instance_id] = self.event.instance
+
+                # subcomponent exists! we only need to edit it :)
+                self.set_event_data_to_edited_data(
+                    self.event.root_event.subcomponents[self.event.instance_id],
+                    event_title=event_title)
+
+                # emit root event
+                self.accepted.emit(self.event.root_event)
+            else:
+                # just work directly on the current event
+                self.set_event_data_to_edited_data(self.event, event_title=event_title)
+                self.accepted.emit(self.event)
         self.close()
+
+    def set_event_data_to_edited_data(self, event: Event, event_title: str):
+        event.title = event_title
+        event.location = self.location.text()
+        event.description = self.description.toPlainText()
+        event.timezone = self.timezone.currentText()
+        event.all_day = self.all_day.isChecked()
+        event.start = self.start_time.dateTime().toPyDateTime()
+        if event.all_day:
+            # all-day end-times are non-inclusive
+            event.end = (self.end_time.dateTime().toPyDateTime() + timedelta(days=1))
+        else:
+            event.end = self.end_time.dateTime().toPyDateTime()
+        event.calendar = self.calendar_from_name(calendar_name=self.calendar.currentText())
+        event.bg_color = self.get_bg_color()
+        event.recurrence = self.get_recurrence()
+
 
     def get_recurrence(self):
         if self.recurring.isChecked():

@@ -81,6 +81,8 @@
  - ### Icons from [Flaticon](https://www.flaticon.com)
    Attribution Links:
    - <div>Icons made by <a href="https://smashicons.com/" title="Smashicons">Smashicons</a> from <a href="https://www.flaticon.com/" title="Flaticon">www.flaticon.com</a></div>
+   - https://www.flaticon.com/packs/interaction-assets-2
+   - <a href="https://www.flaticon.com/free-icons/data" title="data icons">Data icons created by Smashicons - Flaticon</a>
    - <a href="https://www.flaticon.com/free-icons/wind" title="wind icons">Wind icons created by Freepik - Flaticon</a><br>
    - <a href="https://www.flaticon.com/free-icons/travel" title="travel icons">Travel icons created by Good Ware - Flaticon</a><br>
    - <a href="https://www.flaticon.com/free-icons/tennis" title="tennis icons">Tennis icons created by Good Ware - Flaticon</a>

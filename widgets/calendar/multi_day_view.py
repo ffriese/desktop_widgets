@@ -8,7 +8,8 @@ from PyQt5.QtCore import Qt, QRect, pyqtSignal, QPoint
 from PyQt5.QtGui import QPainter, QPen, QColor, QFont, QBrush
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QApplication
 
-from plugins.calendarplugin.calendar_plugin import Event
+from helpers.tools import time_method
+from plugins.calendarplugin.calendar_plugin import Event, EventInstance
 from plugins.weather.weather_data_types import Temperature, Precipitation, SunTime
 from plugins.weather.weather_plugin import WeatherReport
 from widgets.calendar.all_day_widget import AllDayWidget
@@ -96,56 +97,77 @@ class MultiDayView(Widget):
         self.daily_weather_widget.set_weather(weather_data)
         self.update(self.rect())
 
-    def add_events(self, events: Dict[str, Event]):
+    def add_event(self, event: Union[Event, EventInstance]):
+        today = self.start_date
+        event_instance = event if isinstance(event, Event) else event.instance
+
+        if today + timedelta(days=self.days) >= event_instance.start.date() \
+                and today <= event_instance.end.date():
+
+            # self.debug('tyring: %r' % event['summary'])
+            event_days = (event_instance.end.date() - event_instance.start.date()).days + 1
+            date_offset = (event_instance.start.date() - today).days
+
+            if event_instance.all_day:
+                event_days -= 1
+                begin = -1
+                end = -1
+
+                print(f'{event_instance.title}: {event_instance.start.date()}-{event_instance.end.date()} -> eds:{event_days}, begin:{begin}, end:{end}')
+                for day in range(0, event_days):
+                    column = date_offset + day
+                    if 0 <= column < self.days:
+                        if begin < 0:
+                            begin = column  # self.day_widgets[column].geometry().x()
+                            end = column  # begin + self.day_widgets[column].geometry().width()
+                        else:
+                            end = column  # self.day_widgets[column].geometry().x() + \
+                            # self.day_widgets[column].geometry().width()
+
+                print(f'{event_instance.title}: {event_instance.start.date()}-{event_instance.end.date()} -> eds:{event_days}, begin:{begin}, end:{end}')
+                if begin >= 0:
+                    self.all_day_view.add_event(event, begin, end + 1)
+
+            else:
+                for day in range(0, event_days):
+                    column = date_offset + day
+                    if 0 <= column < self.days:
+                        # self.debug('painting day %r of %r (col: %r)' % (day, event['summary'], column))
+                        if day > 0:
+                            start_hour = 0  # self.start_hour??
+                        else:
+                            start_hour = event_instance.start.hour + (event_instance.start.minute / 60)  # real
+                        if day == event_days - 1:
+                            end_hour = event_instance.end.hour + (event_instance.end.minute / 60)  # real
+                        else:
+                            end_hour = 24  # self.end_hour??
+                        self.day_widgets[column].add_event(event, start_hour, end_hour)
+
+    def add_events(self, events: Dict[str, Union[Event, List[EventInstance]]]):
         for event_id, event in events.items():
-            today = self.start_date
-            if today + timedelta(days=self.days) >= event.start.date() \
-                    and today <= event.end.date():
+            if isinstance(event, list):
+                for ev in event:
+                    self.add_event(ev)
 
-                # self.debug('tyring: %r' % event['summary'])
-                event_days = (event.end.date() - event.start.date()).days + 1
-                date_offset = (event.start.date() - today).days
+            elif isinstance(event, Event):
+                self.add_event(event)
+            else:
+                ...
 
-                if event.all_day:
-                    begin = -1
-                    end = -1
-                    for day in range(0, event_days):
-                        column = date_offset + day
-                        if 0 <= column < self.days:
-                            if begin < 0:
-                                begin = column  # self.day_widgets[column].geometry().x()
-                                end = column  # begin + self.day_widgets[column].geometry().width()
-                            else:
-                                end = column  # self.day_widgets[column].geometry().x() + \
-                                # self.day_widgets[column].geometry().width()
-
-                    if begin >= 0:
-                        self.all_day_view.add_event(event, begin, end+1)
-
-                else:
-                    for day in range(0, event_days):
-                        column = date_offset + day
-                        if 0 <= column < self.days:
-                            # self.debug('painting day %r of %r (col: %r)' % (day, event['summary'], column))
-                            if day > 0:
-                                start_hour = 0  # self.start_hour??
-                            else:
-                                start_hour = event.start.hour + (event.start.minute / 60)  # real
-                            if day == event_days - 1:
-                                end_hour = event.end.hour + (event.end.minute / 60)  # real
-                            else:
-                                end_hour = 24  # self.end_hour??
-                            self.day_widgets[column].add_event(event, start_hour, end_hour)
-
-    def remove_event(self, event_id: str, new_event: Union[Event, None] = None):
+    def remove_event(self, event_id: str, new_event: Union[Event, List[EventInstance], None] = None):
         found = 0
         for dw in self.day_widgets:
             found += 1 if dw.remove_event(event_id) else 0
         found += 1 if self.all_day_view.remove_event(event_id) else 0
         if found == 0:
             self.log_error(f'REMOVING EVENT {event_id} FAILED!!!')
+        else:
+            self.log_info(f'removed {found} widgets belonging to {event_id}')
         if new_event is not None:
-            self.add_events({new_event.id: new_event})
+            if isinstance(new_event, list):
+                self.add_events({new_event[0].root_event.id: new_event})
+            else:
+                self.add_events({new_event.id: new_event})
 
     def remove_all(self):
         for dw in self.day_widgets:
@@ -199,11 +221,12 @@ class MultiDayView(Widget):
                 hour = int(math.floor(hr))
                 minute = int(round((hr - hour) * 60))
                 day = widget.day
+                hour += + self.start_hour
                 if hour > 23:
                     hour = 0
                     minute = 0
                     day = widget.day + timedelta(days=1)
-                return datetime.combine(day, d_time(hour=hour+self.start_hour, minute=minute))
+                return datetime.combine(day, d_time(hour=hour, minute=minute))
             start_time = get_date_time(start.y(), start_w)
             end_time = get_date_time(end.y(), end_w)
             return start_time, end_time

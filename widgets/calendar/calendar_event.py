@@ -3,13 +3,15 @@ import math
 import re
 import webbrowser
 from datetime import datetime, date, timedelta
+from typing import Union
 
 from PyQt5.QtCore import pyqtSignal, Qt, QRect
 from PyQt5.QtGui import QIcon, QPainter, QPen, QFont, QResizeEvent
 from PyQt5.QtWidgets import QWidget, QMenu, QAction, QGraphicsDropShadowEffect, QLabel, QVBoxLayout
 
-from helpers.tools import ImageTools, PathManager
-from plugins.calendarplugin.calendar_plugin import Event, CalendarAccessRole
+from helpers.rrule_helper import get_recurrence_text
+from helpers.tools import ImageTools, PathManager, SignalingThread
+from plugins.calendarplugin.calendar_plugin import Event, CalendarAccessRole, EventInstance
 from plugins.weather.iconsets import IconSet
 from plugins.weather.weather_data_types import Temperature, WeatherDescription, Wind
 from plugins.weather.weather_plugin import WeatherReport
@@ -19,7 +21,7 @@ from widgets.tool_widgets.widget import Widget
 
 
 class CalendarEventWidget(Widget):
-    delete_signal = pyqtSignal(str, object)  # id, Event
+    delete_signal = pyqtSignal(str, object)  # id, updated Event
 
     edit_request_signal = pyqtSignal()
     delete_request_signal = pyqtSignal()
@@ -55,7 +57,7 @@ class CalendarEventWidget(Widget):
 
         from credentials import MapQuestCredentials
         response = requests.get(f"https://www.mapquestapi.com/staticmap/v5/map?key"
-                      f"={MapQuestCredentials.get_api_key()}&center={location_string}&size=250,250", stream=True)
+                      f"={MapQuestCredentials.get_api_key()}&center={location_string}&size=250,250&zoom=10&locations={location_string}", stream=True)
         if response.status_code == 200:
 
             import base64
@@ -71,8 +73,7 @@ class CalendarEventWidget(Widget):
 
         return cls.__MAP_IMAGES__[location_string]
 
-
-    def __init__(self, parent, event: Event, begin, end):
+    def __init__(self, parent, event: Union[Event, EventInstance], begin, end):
         super(CalendarEventWidget, self).__init__(parent=parent)
         self.__mousePressPos = None
         self.__mouseMovePos = None
@@ -85,6 +86,10 @@ class CalendarEventWidget(Widget):
         self.end = end
         self.setMinimumHeight(5)
         self.event = event
+        self.tooltip_data = ''
+        self.tooltip_thread = SignalingThread(target=self.create_tool_tip)
+        self.tooltip_thread.finished.connect(self.update_tooltip_data)
+        self.tooltip_thread.setDaemon(True)
         self.tooltip_widget = QWidget(self)
         self.tooltip_widget.setStyleSheet('background-color: red')
         self.tooltip_widget.hide()
@@ -95,8 +100,8 @@ class CalendarEventWidget(Widget):
         self.tooltip_widget.layout().addWidget(self.tooltip_widget_label)
 
         self.setWindowFlag(Qt.SubWindow)
-        if self.event.calendar.access_role == CalendarAccessRole.OWNER:
-            if not event.all_day:
+        if self.root_event().calendar.access_role == CalendarAccessRole.OWNER:
+            if not self.event_instance().all_day:
                 self.top_grip = SideGrip(self, Qt.TopEdge)
                 self.bottom_grip = SideGrip(self, Qt.BottomEdge)
                 self.top_grip.resized.connect(lambda r: self.request_dragged_time_update(r, Qt.TopEdge))
@@ -115,29 +120,29 @@ class CalendarEventWidget(Widget):
                 self.left_grip.resizing_end.connect(self.tooltip_widget.hide)
                 self.right_grip.resizing_end.connect(self.tooltip_widget.hide)
 
-        spans_multiple_days = self.event.start.date() != self.event.end.date()
-        if not event.all_day:
-            if not spans_multiple_days:
+        if not self.event_instance().all_day:
+            if not self.event_instance().start.date() != self.event_instance().end.date() :
                 start_time_format = '%a %d.%m. %H:%M'
                 end_time_format = '%H:%M'
             else:
                 start_time_format = '%a %d.%m. %H:%M'
                 end_time_format = '%a %d.%m. %H:%M'
 
-            self.time = f"{self.event.start.strftime(start_time_format)} - " \
-                        f"{self.event.end.strftime(end_time_format)}"
+            self.time = f"{self.event_instance().start.strftime(start_time_format)} - " \
+                        f"{self.event_instance().end.strftime(end_time_format)}"
         else:
-            if not spans_multiple_days:
+            if self.event_instance().start.date() == self.event_instance().end.date() or \
+                    (self.event_instance().end - timedelta(days=1)).date() == self.event_instance().start.date():
                 start_time_format = '%a %d.%m.'
-                self.time = f"{self.event.start.strftime(start_time_format)}"
+                self.time = f"{self.event_instance().start.strftime(start_time_format)}"
             else:
                 start_time_format = '%a %d.%m.'
                 end_time_format = '%a %d.%m.'
-                self.time = f"{self.event.start.strftime(start_time_format)} - " \
-                            f"{self.event.end.strftime(end_time_format)}"
+                self.time = f"{self.event_instance().start.strftime(start_time_format)} - " \
+                            f"{(self.event_instance().end - timedelta(days=1)).strftime(end_time_format)}"
 
         try:
-            icon, summary = EmojiPicker.split_summary(self.event.title)
+            icon, summary = EmojiPicker.split_summary(self.event_instance().title)
             self.summary = summary
             if icon:
                 self.icon = EmojiPicker.get_emoji_icon_from_unicode(icon, 32)
@@ -146,78 +151,27 @@ class CalendarEventWidget(Widget):
         except KeyError:
             self.summary = None
             self.icon = None
-            logging.getLogger(self.__class__.__name__).log(level=logging.ERROR, msg=self.event)
+            logging.getLogger(self.__class__.__name__).log(level=logging.ERROR, msg=self.event_instance())
         except IndexError:
-            icon, summary = EmojiPicker.split_summary(self.event.title)
+            icon, summary = EmojiPicker.split_summary(self.event_instance().title)
             self.summary = summary
             self.icon = None
 
         try:
-            self.location = self.event.location
+            self.location = self.event_instance().location
         except KeyError:
             self.location = None
         try:
-            self.description = self.event.description.replace('\n', '<br>').replace(' ', '&nbsp;')
-            self.urls = re.findall(r"(?P<url>https?://[^\s]+)", self.event.description)
+            self.description = self.event_instance().description.replace('\n', '<br>').replace(' ', '&nbsp;')
+            self.urls = re.findall(r"(?P<url>https?://[^\s]+)", self.event_instance().description)
         except KeyError:
             self.description = None
-
+        self.tooltip_thread.start()
         self.show()
-        if self.icon is not None:
-            img = ImageTools.pixmap_to_base64(self.icon.pixmap(28, 28))
-        else:
-            img = ''
         self.setStyleSheet('QToolTip {background-color: rgb(30, 30, 30); '
                            'color: white; '
                            'border: 1.5px solid gray;'
                            'padding: 5px;border-radius: 2px;}')
-        time_str = f"<tr><td>{self.get_icon_base_64(PathManager.get_icon_path('time.png'), 10, '<b>Time:</b>')} " \
-                   f"</td><td>{self.time}</td></tr>" if self.time else ''
-        loc_str = f"<tr><td>{self.get_icon_base_64(PathManager.get_icon_path('location.png'), 10, '<b>Location:</b>')} " \
-                  f"</td><td>{self.location}</td></tr>  <tr><td></td><td>" \
-                  f"{self.get_map_image_base_64(self.location)}</td></tr>" if self.location else ''
-        desc_str = f"<tr><td>{self.get_icon_base_64(PathManager.get_icon_path('description.png'), 10, '<b>Description:</b>')} " \
-                   f"</td><td>{self.description}</td></tr>" if self.description else ''
-        alarm_str = f"<tr><td>{self.get_icon_base_64(PathManager.get_icon_path('bell.png'), 10, '<b>Alarm:</b>')} " \
-                   f"</td><td>{self.event.alarm.alarm_time.strftime('%H:%M')}</td></tr>" if self.event.alarm else ''
-        weather = ''
-        if hasattr(self.parent().parent(), 'weather_data') and self.parent().parent().weather_data:
-            weather_data: WeatherReport = self.parent().parent().weather_data
-            report = weather_data.get_report_from(self.event.start, self.event.end)
-            if report:
-                temps = [dp.data.get(Temperature).get_temperature()['value'] for dp in report.values()]
-                min_t = round(min(temps))
-                max_t = round(max(temps))
-                temp = f"{min_t}-{max_t}" if min_t != max_t else str(min_t)
-
-                gusts = [dp.data.get(Wind).get_gust()['value']*3.6 for dp in report.values()]
-                winds = [dp.data.get(Wind).get_speed()['value']*3.6 for dp in report.values()]
-                wind = f"{round(min(winds))}-{round(max(winds))} km/h (Gusts: {round(max(gusts))} km/h)"
-                wind_icon = self.get_icon_base_64(PathManager.get_icon_path('wind.png'), 20)
-
-                data_point = list(report.values())[0].data
-
-                t_icon = self.get_icon_base_64(PathManager.get_icon_path('temperature_4.png'), 20)
-                code = data_point.get(WeatherDescription).get_code()['value']
-                icon_set = IconSet.WEATHER_UNDERGOUND
-                c_icon = self.get_icon_base_64(
-                    PathManager.get_weather_icon_set_path(icon_set['folder'], f"{icon_set['data'][code]}.svg"), 20)
-
-                weather = f"<tr></tr><tr><td>{c_icon}</td><td>{code.name.replace('_', ' ').title()}</td></tr>" \
-                          f"<tr><td>{t_icon}</td><td>{temp}°C</td></tr> " \
-                          f"<tr><td>{wind_icon}</td><td>{wind}</td></tr> "
-
-        self.setToolTip(f'<h2>{img}<b> {self.summary}</b></h2>'
-                        f'<hr/>'
-                        f'<table>'
-                        f'{time_str}'
-                        f'{loc_str}'
-                        f'{desc_str}'
-                        f'{alarm_str}'
-                        f'{weather}'
-                        f'<tr></tr></table>'
-                        f"{self.get_icon_base_64(PathManager.get_icon_path('cal.png'), 10, '<i>Calendar:</i>')}"
-                        f"<i>{self.event.calendar.name}</i>")
 
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
@@ -233,7 +187,7 @@ class CalendarEventWidget(Widget):
                                    'Edit event', self)
 
         self.context_menu.addAction(self.edit_action)
-        if self.event.calendar.access_role != CalendarAccessRole.OWNER:
+        if self.event_instance().calendar.access_role != CalendarAccessRole.OWNER:
             self.edit_action.setDisabled(True)
             self.edit_action.setText('Edit (read-only)')
             self.edit_action.setIcon(QIcon(PathManager.get_icon_path('lock_event.png')))
@@ -241,11 +195,19 @@ class CalendarEventWidget(Widget):
 
             self.edit_action.triggered.connect(self.edit_event)
 
-            if self.event.is_recurring():
-                rec_id = self.event.recurring_event_id
+            if self.event_instance().is_recurring():
+                rec_id = self.event_instance().recurring_event_id
                 # self.edit_action.setText('Edit recurring event')
                 self.recurring = True
                 # cal_plugin.get_rec_event(self.event)
+                if self.root_event().exdates:
+                    self.restore_exdates_menu = QMenu('Restore removed instances', self)
+                    self.exdate_restore_actions = {}
+                    for exdate in self.root_event().exdates:
+                        self.exdate_restore_actions[exdate] = QAction(f'Restore {exdate}', self)
+                        self.restore_exdates_menu.addAction(self.exdate_restore_actions[exdate])
+                    self.context_menu.addMenu(self.restore_exdates_menu)
+
             else:
                 self.recurring = False
             self.delete_action = QAction(QIcon(PathManager.get_icon_path('delete_event.png')),
@@ -259,6 +221,80 @@ class CalendarEventWidget(Widget):
             url_action.triggered.connect(lambda: webbrowser.open(url))
             self.url_actions.append(url_action)
             self.context_menu.addAction(url_action)
+
+    def update_tooltip_data(self):
+        self.setToolTip(self.tooltip_data)
+
+    def root_event(self) -> Event:
+        if isinstance(self.event, Event):
+            return self.event
+        elif isinstance(self.event, EventInstance):
+            return self.event.root_event
+
+    def event_instance(self) -> Event:
+        if isinstance(self.event, Event):
+            return self.event
+        elif isinstance(self.event, EventInstance):
+            return self.event.instance
+
+    def create_tool_tip(self):
+        if self.icon is not None:
+            img = ImageTools.pixmap_to_base64(self.icon.pixmap(28, 28))
+        else:
+            img = ''
+        time_str = f"<tr><td>{self.get_icon_base_64(PathManager.get_icon_path('time.png'), 10, '<b>Time:</b>')} " \
+                   f"</td><td>{self.time}</td></tr>" if self.time else ''
+        loc_str = f"<tr><td>{self.get_icon_base_64(PathManager.get_icon_path('location.png'), 10, '<b>Location:</b>')} " \
+                  f"</td><td>{self.location}</td></tr>  <tr><td></td><td>" \
+                  f"{self.get_map_image_base_64(self.location)}</td></tr>" if self.location else ''
+        desc_str = f"<tr><td>{self.get_icon_base_64(PathManager.get_icon_path('description.png'), 10, '<b>Description:</b>')} " \
+                   f"</td><td>{self.description}</td></tr>" if self.description else ''
+        alarm_str = f"<tr><td>{self.get_icon_base_64(PathManager.get_icon_path('bell.png'), 10, '<b>Alarm:</b>')} " \
+                    f"</td><td>{self.event_instance().alarm.alarm_time.strftime('%H:%M')}</td></tr>" if self.event_instance().alarm else ''
+        recurrence = f"<tr><td>{self.get_icon_base_64(PathManager.get_icon_path('recurring.png'), 10, '<b>Recurrence:</b>')} " \
+                     f"</td><td>{get_recurrence_text(self.root_event().recurrence)}</td></tr>" if self.root_event().recurrence else ''
+        weather = ''
+
+        try:
+            if hasattr(self.parent().parent(), 'weather_data') and self.parent().parent().weather_data:
+                weather_data: WeatherReport = self.parent().parent().weather_data
+                report = weather_data.get_report_from(self.event_instance().start, self.event_instance().end)
+                if report:
+                    temps = [dp.data.get(Temperature).get_temperature()['value'] for dp in report.values()]
+                    min_t = round(min(temps))
+                    max_t = round(max(temps))
+                    temp = f"{min_t}-{max_t}" if min_t != max_t else str(min_t)
+
+                    gusts = [dp.data.get(Wind).get_gust()['value'] * 3.6 for dp in report.values()]
+                    winds = [dp.data.get(Wind).get_speed()['value'] * 3.6 for dp in report.values()]
+                    wind = f"{round(min(winds))}-{round(max(winds))} km/h (Gusts: {round(max(gusts))} km/h)"
+                    wind_icon = self.get_icon_base_64(PathManager.get_icon_path('wind.png'), 20)
+
+                    data_point = list(report.values())[0].data
+
+                    t_icon = self.get_icon_base_64(PathManager.get_icon_path('temperature_4.png'), 20)
+                    code = data_point.get(WeatherDescription).get_code()['value']
+                    icon_set = IconSet.WEATHER_UNDERGOUND
+                    c_icon = self.get_icon_base_64(
+                        PathManager.get_weather_icon_set_path(icon_set['folder'], f"{icon_set['data'][code]}.svg"), 20)
+
+                    weather = f"<tr></tr><tr><td>{c_icon}</td><td>{code.name.replace('_', ' ').title()}</td></tr>" \
+                              f"<tr><td>{t_icon}</td><td>{temp}°C</td></tr> " \
+                              f"<tr><td>{wind_icon}</td><td>{wind}</td></tr> "
+        except RuntimeError as e:
+            print('RTE', e)
+        self.tooltip_data = f'<h2>{img}<b> {self.summary}</b></h2>' \
+                        f'<hr/>' \
+                        f'<table>' \
+                        f'{time_str}' \
+                        f'{loc_str}' \
+                        f'{desc_str}' \
+                        f'{recurrence}' \
+                        f'{alarm_str}' \
+                        f'{weather}' \
+                        f'<tr></tr></table>' \
+                        f"{self.get_icon_base_64(PathManager.get_icon_path('cal.png'), 10, '<i>Calendar:</i>')}" \
+                        f" <i>{self.event_instance().calendar.name}</i>" \
 
     def show_context_menu(self, pos):
         self.context_menu.exec(self.mapToGlobal(pos))
@@ -310,14 +346,14 @@ class CalendarEventWidget(Widget):
             s_h, s_m, e_h, e_m = self.rect_to_times(rect, start_hour, end_hour)
             # print(f'{s_h:02d}:{s_m:02d}', f'{e_h:02d}:{e_m:02d}')
             if resized_from == Qt.TopEdge:
-                new_start = self.event.start.replace(hour=s_h, minute=s_m)
-                new_end = self.event.end
+                new_start = self.event_instance().start.replace(hour=s_h, minute=s_m)
+                new_end = self.event_instance().end
             else:
-                new_start = self.event.start
+                new_start = self.event_instance().start
                 if e_h == 24:
-                    new_end = (self.event.end+timedelta(days=1)).replace(hour=0, minute=0)
+                    new_end = (self.event_instance().end+timedelta(days=1)).replace(hour=0, minute=0)
                 else:
-                    new_end = self.event.end.replace(hour=e_h, minute=e_m)
+                    new_end = self.event_instance().end.replace(hour=e_h, minute=e_m)
 
             self.time_change_request.emit(new_start, new_end)
         else:
@@ -360,7 +396,7 @@ class CalendarEventWidget(Widget):
         self.tooltip_widget.show()
 
     def mousePressEvent(self, event):
-        if self.event.calendar.access_role in [CalendarAccessRole.OWNER, CalendarAccessRole.WRITER]:
+        if self.event_instance().calendar.access_role in [CalendarAccessRole.OWNER, CalendarAccessRole.WRITER]:
             self.__mousePressPos = None
             self.__mouseMovePos = None
             if event.button() == Qt.LeftButton:
@@ -370,7 +406,7 @@ class CalendarEventWidget(Widget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if self.event.calendar.access_role in [CalendarAccessRole.OWNER, CalendarAccessRole.WRITER]:
+        if self.event_instance().calendar.access_role in [CalendarAccessRole.OWNER, CalendarAccessRole.WRITER]:
             if event.buttons() == Qt.LeftButton:
                 # adjust offset from clicked point to origin of widget
                 currPos = self.mapToGlobal(self.pos())
@@ -384,7 +420,7 @@ class CalendarEventWidget(Widget):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if self.event.calendar.access_role in [CalendarAccessRole.OWNER, CalendarAccessRole.WRITER]:
+        if self.event_instance().calendar.access_role in [CalendarAccessRole.OWNER, CalendarAccessRole.WRITER]:
             if self.__mousePressPos is not None:
                 moved = event.globalPos() - self.__mousePressPos
                 # if moved.manhattanLength() > 3:
@@ -397,20 +433,20 @@ class CalendarEventWidget(Widget):
 
     def paintEvent(self, paint_event):
         painter = QPainter(self)
-        painter.setBrush(self.event.calendar.bg_color)
+        painter.setBrush(self.event_instance().calendar.bg_color)
         painter.setPen(Qt.NoPen)
         # painter.pen().setJoinStyle(Qt.BevelJoin)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.drawRoundedRect(QRect(0, 0, self.width(), self.height()), 4.0, 4.0)
-        if self.event.bg_color is not None:
-            painter.setBrush(self.event.get_bg_color())
+        if self.event_instance().bg_color is not None:
+            painter.setBrush(self.event_instance().get_bg_color())
             painter.drawRoundedRect(QRect(2, 0, self.width()-2, self.height()), 4.0, 4.0)
-        pen = QPen(self.event.get_fg_color())
+        pen = QPen(self.event_instance().get_fg_color())
         stroke = 1
         pen.setWidth(stroke)
         painter.setPen(pen)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setBrush(self.event.get_fg_color())
+        painter.setBrush(self.event_instance().get_fg_color())
         painter.setFont(QFont('Calibri', 10))
         if self.icon is not None:
             self.icon.paint(painter, QRect(2, 2, 15, 15))
@@ -418,10 +454,22 @@ class CalendarEventWidget(Widget):
         else:
             painter.drawText(QRect(0, 0, self.width(), self.height()), Qt.TextWordWrap, self.summary)
 
-        if self.event.alarm:
-            bell = QIcon(PathManager.get_icon_path('bell.png'))
-            bell.paint(painter, QRect(self.width() - 17, 2, 15, 15))
+        icon_size = 15
+        icon_margin = 2
+        alarm_icon_pos = self.width() - (icon_size + icon_margin), icon_margin
+        rec_icon_pos = self.width() - (icon_size + icon_margin), self.height() - (icon_size + icon_margin)
+        sync_icon_pos = rec_icon_pos
 
-        if not self.event.is_synchronized():
-            nsync = QIcon(PathManager.get_icon_path('cloud-sync-icon.png'))
-            nsync.paint(painter, QRect(self.height()-17, 2, 15, 15))
+        if self.event_instance().alarm:
+            alarm_icon = QIcon(PathManager.get_icon_path('bell.png'))
+            alarm_icon.paint(painter, QRect(*alarm_icon_pos, icon_size, icon_size))
+
+        if self.root_event().recurrence:
+            rec_icon = QIcon(PathManager.get_icon_path('recurring.png'))
+            rec_icon.paint(painter, QRect(*rec_icon_pos, icon_size, icon_size))
+
+        if not self.event_instance().is_synchronized():
+            if self.root_event().recurrence:  # if rec_icon also present, shift sync icon to the left
+                sync_icon_pos[0] -= (icon_size + icon_margin)
+            sync_icon = QIcon(PathManager.get_icon_path('cloud-sync-icon.png'))
+            sync_icon.paint(painter, QRect(*sync_icon_pos, icon_size, icon_size))

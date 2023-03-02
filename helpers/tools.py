@@ -7,13 +7,15 @@ from typing import Union
 from PyQt5.QtCore import QObject, pyqtSignal, QBuffer, QIODevice, QPoint, QSize
 from PyQt5.QtGui import QPixmap
 
+DEBUG = False
 
 def time_method(method):
     def wrapper(*args, **kwargs):
         start_time = time.time()
         result = method(*args, **kwargs)
         end_time = time.time()
-        print(f"{method.__name__} took {end_time - start_time:.2f} seconds to run")
+        if DEBUG:
+            print(f"{method} took {end_time - start_time:.2f} seconds to run")
         return result
     return wrapper
 
