@@ -115,7 +115,7 @@ class AllDayWidget(TimelineWidget):
         painter = QPainter(self)
         for d in range(0, self.days):
             painter.setFont(QFont('Calibri',
-                                  min(self.bg_widgets[d].width() / 8, 16)
+                                  min(int(self.bg_widgets[d].width() / 8), 16)
                                   )
                             )
             day = (self.start_date + timedelta(days=d))

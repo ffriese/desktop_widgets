@@ -56,7 +56,7 @@ class BasePlugin(QObject):
         except NotImplementedError as ne:
             raise ne
         except Exception as e:
-            self.log_error(self, 'CAUGHT EXCEPTION IN UPDATE SYNC:', e, type(e), level=logging.ERROR)
+            self.log_error(self, 'CAUGHT EXCEPTION IN UPDATE SYNC:', e, type(e))
             self.threaded_exception.emit(e)
             return e
 

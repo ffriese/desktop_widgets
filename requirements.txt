@@ -1,0 +1,13 @@
+PyQt5
+PyQtWebEngine
+emoji
+termcolor
+qrainbowstyle==0.6.5
+python-dateutil
+requests
+caldav
+icalendar
+recurrent
+mutagen
+psutil
+pypiwin32; sys_platform == 'nt'
