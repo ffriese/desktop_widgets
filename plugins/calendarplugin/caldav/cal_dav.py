@@ -1,3 +1,4 @@
+import copy
 import datetime
 import uuid
 from typing import Dict, Any, Union, List
@@ -177,10 +178,20 @@ class CalDavPlugin(CalendarPlugin):
                      moved_from_calendar: Union[Calendar, None] = None) -> Union[Event, List[EventInstance]]:
         try:
 
-            ## TODO: CHECK IF WE NEED TO CHANGE THE ID FOR MOVED EVENTS!!!!!
+            if moved_from_calendar is not None:
+                # create copy of event to move to new calendar
+                # (original event, including old id, is still necessary for proper deletion)
+                new_event = copy.deepcopy(event)
+                # remove event id, will be re-generated before saving
+                new_event.id = None
+                for e in new_event.subcomponents.values():
+                    e.id = None
+            else:
+                new_event = event
+
             # 1) 'update, or copy to new calendar'
             edited_event = CalDavConversions.caldav_event_from_event(
-                event, self.caldav_calendars[event.calendar.id].caldav_cal)
+                new_event, self.caldav_calendars[event.calendar.id].caldav_cal)
             raw_edited_event = edited_event.save()
             self.caldav_calendars[event.calendar.id].register_update(raw_edited_event.url)
 
