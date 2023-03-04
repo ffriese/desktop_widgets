@@ -22,7 +22,7 @@ Tested On:
 
 ## Calendar Widget
 
-The Calendar Widget is an interactive Week-Calendar, which can be connected to Google or CalDAV Calendars.
+The Calendar Widget is an interactive Week-Calendar, which can be connected to CalDAV Calendars.
 It also features a weather chart in the background when connected to a weather provider ([tomorrow.io (formerly climacell) Free API](https://www.tomorrow.io/weather-api/)). 
 
 ### Quick Overview of basic features:
