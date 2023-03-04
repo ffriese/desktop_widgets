@@ -1,7 +1,6 @@
 # Desktop Widgets: Cross-Platform Desktop Widgets
 
-![Desktop Widgets Build](https://github.com/ffriese/desktop_widgets/actions/workflows/python-app.yml/badge.svg)
-
+[![Desktop Widgets Build](https://github.com/ffriese/desktop_widgets/actions/workflows/python-app.yml/badge.svg)](https://github.com/ffriese/desktop_widgets/actions/workflows/python-app.yml)
 
 ## Run
 ```python3 desktop_widgets_core.py```
