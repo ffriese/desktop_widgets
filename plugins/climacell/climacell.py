@@ -406,36 +406,6 @@ class ClimacellPlugin(WeatherPlugin):
         self.log_info(sub, country)
         return f'{sub}, {country}'
 
-    def __get_location(self):
-        warnings.warn('deprecated. use mapquest', DeprecationWarning, stacklevel=2)
-        api_key = GoogleCredentials.get_api_key()
-        url = f'https://maps.googleapis.com/maps/api/geocode/json?latlng={self.lat},{self.long}' \
-              f'&key={api_key}'
-        try:
-            response = requests.get(url)
-        except requests.exceptions.RequestException as exception:
-            return ''
-        result = json.loads(response.text)
-        if result.get('error_message', '') == 'The provided API key is invalid.':
-            raise CredentialsNotValidException(GoogleCredentials, CredentialType.API_KEY)
-        country = self._parse_adress_components(result['results'], [{'country', 'political'}])
-        city = self._parse_adress_components(result['results'], [{'locality'},
-                                                                 {'administrative_area_level_2'},
-                                                                 {'administrative_area_level_1'}])
-        if country is not None:
-            if city is not None:
-                return f'{city}, {country}'
-            return country
-        try:
-            plus_code = result['plus_code']['compound_code']
-            return ' '.join(plus_code.split(' ')[1:])
-        except KeyError:
-            try:
-                return self._parse_adress_components(result['results'])
-            except IndexError:
-                pass
-            return f'Coordinates: {round(self.lat, 4)}, {round(self.long, 4)}'
-
     def _merge(self, nowcast, hourly):
         times = {d['observation_time']['value']: d for d in nowcast}
         interpolated_hours = []
