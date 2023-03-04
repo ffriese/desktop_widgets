@@ -1,7 +1,6 @@
 # Desktop Widgets: Cross-Platform Desktop Widgets
-Tested On:
-- Windows
-- Ubuntu
+
+![Desktop Widgets Build](https://github.com/ffriese/desktop_widgets/actions/workflows/python-app.yml/badge.svg)
 
 
 ## Run
