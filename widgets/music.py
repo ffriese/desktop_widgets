@@ -140,9 +140,9 @@ class MusicWidget(BaseWidget):
         if self.lyrics_provider is None:
             self.lyrics_provider = 'MiniLyrics'
             self.widget_updated.emit('lyrics_provider', self.lyrics_provider)
-        lyrics_plugin_class = getattr(importlib.import_module('plugins.%s' % self.lyrics_provider.lower()),
-                                      '%sPlugin' % self.lyrics_provider)
-        self.register_plugin(lyrics_plugin_class, 'lyrics_plugin')
+            lyrics_plugin_class = getattr(importlib.import_module('plugins.%s' % self.lyrics_provider.lower()),
+                                          '%sPlugin' % self.lyrics_provider)
+            self.register_plugin(lyrics_plugin_class, 'lyrics_plugin')
 
         self.load_player()
 

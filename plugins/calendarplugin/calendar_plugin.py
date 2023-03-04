@@ -160,7 +160,6 @@ class CalendarData:
 
 
 class CalendarPlugin(BasePlugin):
-
     COLORS = {}
 
     class CacheMode(Enum):
@@ -168,8 +167,14 @@ class CalendarPlugin(BasePlugin):
         REFRESH_LATER = 2,
         ALLOW_CACHE = 3
 
-    def update_async(self, days_in_future: int, days_in_past: int,
+    def update_async(self, days_in_future: int = None, days_in_past: int = None,
                      cache_mode=CacheMode.FORCE_REFRESH, *args, **kwargs) -> None:
+        if days_in_future is None:
+            self.log_warn('days_in_future missing! should not happen unless after inserting credentials')
+            days_in_future = 12
+        if days_in_past is None:
+            self.log_warn('days_in_past missing! should not happen unless after inserting credentials')
+            days_in_past = 2
         self.log_info(self, 'async', cache_mode)
         super().update_async(cache_mode=cache_mode, days_in_future=days_in_future, days_in_past=days_in_past,
                              *args, **kwargs)
@@ -200,7 +205,6 @@ class CalendarPlugin(BasePlugin):
                      moved_from_calendar: Union[Calendar, None] = None,
                      ) -> Union[Event, List[EventInstance]]:
         raise NotImplementedError()
-
 
     def get_event_colors(self) -> Dict[Any, QColor]:
         raise NotImplementedError()

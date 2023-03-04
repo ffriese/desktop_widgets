@@ -279,10 +279,10 @@ class MultiDayView(Widget):
         for t in range(self.start_hour, self.end_hour+1):
             painter.drawText(QRect(
                 self.day_widgets[0].geometry().x() - 30,  # TODO:REMOVE MAGIC NUMBER
-                self.day_widgets[0].geometry().y() - 7 +
-                (t-self.start_hour) * (self.day_widgets[0].geometry().height() / self.hours_displayed()),
+                int(self.day_widgets[0].geometry().y() - 7 +
+                (t-self.start_hour) * (self.day_widgets[0].geometry().height() / self.hours_displayed())),
                 30,  # TODO:REMOVE MAGIC NUMBER
-                self.day_widgets[0].geometry().height() / self.hours_displayed()), Qt.TextWordWrap, '%02d:00' % t)
+                int(self.day_widgets[0].geometry().height() / self.hours_displayed())), Qt.TextWordWrap, '%02d:00' % t)
 
         # draw weather
         if self.weather_data:
@@ -297,8 +297,8 @@ class MultiDayView(Widget):
             hour = now.hour + (now.minute / 60) - self.start_hour
             _circle_w = 6
             _x = self.day_widgets[0].geometry().x() - _circle_w
-            _y = self.day_widgets[0].geometry().y() + hour * \
-                 (self.day_widgets[0].geometry().height() / self.hours_displayed())
+            _y = int(self.day_widgets[0].geometry().y() + hour * \
+                 (self.day_widgets[0].geometry().height() / self.hours_displayed()))
             _w = self.day_widgets[0].geometry().width() + _circle_w
             pen = QPen(QColor(255, 0, 0))
             pen.setWidth(1)
@@ -306,7 +306,7 @@ class MultiDayView(Widget):
             painter.drawLine(_x, _y, _x + _w, _y)
             painter.setBrush(QColor(255, 0, 0))
             painter.setRenderHint(QPainter.Antialiasing)
-            painter.drawEllipse(QRect(_x, _y - _circle_w / 2, _circle_w, _circle_w))
+            painter.drawEllipse(QRect(_x, int(_y - _circle_w / 2), _circle_w, _circle_w))
 
     def paint_weather(self, painter: QPainter, weather_report: WeatherReport):
         visualizations = OrderedDict([
@@ -325,7 +325,7 @@ class MultiDayView(Widget):
             _hour = _time.hour + (_time.minute / 60) - self.start_hour
             start_y = _hour * (self.day_widgets[0].geometry().height() / self.hours_displayed())
             start_y = min(max(0, start_y), self.day_widgets[0].geometry().height())
-            return self.day_widgets[0].geometry().y() + start_y
+            return int(self.day_widgets[0].geometry().y() + start_y)
 
         # visualize sunrise/sunset
         for time, single_report in weather_report.get_daily_report().items():

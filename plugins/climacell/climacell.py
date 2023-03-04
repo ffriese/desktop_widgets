@@ -10,7 +10,7 @@ from dateutil.tz import tzlocal
 
 import requests
 
-from credentials import ClimacellCredentials, CredentialsNotValidException, GoogleCredentials, CredentialType, \
+from credentials import ClimacellCredentials, CredentialsNotValidException, CredentialType, \
     MapQuestCredentials, ClimacellAPIv4Credentials
 from plugins.base import APILimitExceededException, APIDeprecatedException
 from plugins.weather.weather_data_types import TemperatureParameters, PrecipitationParameters, \

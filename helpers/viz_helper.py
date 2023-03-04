@@ -190,7 +190,7 @@ class BrushDataPoint:
     @classmethod
     def from_precipitation(cls, precipitation: Precipitation, y) -> "BrushDataPoint":
         color = cls.precipitation_type_to_color(precipitation.get_type()['value'])
-        transparency = (precipitation.get_probability()['value'] / 100.0) * 255.0
+        transparency = int((precipitation.get_probability()['value'] / 100.0) * 255.0)
         color.setAlpha(transparency)
         return BrushDataPoint(color, y)
 
@@ -253,5 +253,5 @@ class TemperatureGradient(QLinearGradient):
             rng = high-low
             return (percentage * rng) + low
 
-        return QColor(*[interpolate(getattr(min_col, c)(), getattr(max_col, c)(), perc)
+        return QColor(*[int(interpolate(getattr(min_col, c)(), getattr(max_col, c)(), perc))
                         for c in ['red', 'green', 'blue']])
