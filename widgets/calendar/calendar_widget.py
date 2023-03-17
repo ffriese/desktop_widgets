@@ -498,7 +498,8 @@ class CalendarWidget(BaseWidget):
         if isinstance(event, Event):
             self.view.add_events({event.id: event})
         else:
-            self.view.add_events({event[0].root_event.id: event})
+            if event:  # can be emtpy list if no occurrence in displayed time-frame
+                self.view.add_events({event[0].root_event.id: event})
 
     def delete_event(self, requesting_widget: CalendarEventWidget, plugin=None):
         if plugin is None:
@@ -525,6 +526,8 @@ class CalendarWidget(BaseWidget):
                     new_events = self.cal_plugin.delete_event_instance(requesting_widget.event,
                                                                        days_in_future=self.get_display_days_in_future(),
                                                                        days_in_past=self.get_display_days_in_past())
+                    if requesting_widget:
+                        requesting_widget.delete_signal.emit(requesting_widget.root_event().id, None)
                     self.display_new_event(new_events)
                 return
             else:

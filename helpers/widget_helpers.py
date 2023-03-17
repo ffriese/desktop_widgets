@@ -1,5 +1,7 @@
 import math
+from urllib.parse import quote
 
+import requests
 from PyQt5.QtCore import QPointF, Qt, pyqtSignal, QRect, QPoint, QRectF
 from PyQt5.QtGui import QPainterPath, QPainter, QFont, QFontMetrics, QBrush, QTextOption, QColor, QPaintEvent
 from PyQt5.QtWidgets import QWidget, QSizePolicy
@@ -342,3 +344,39 @@ class TextLabel(QWidget):
         # TextSizeHelper.draw_text_in_rect(painter, self.text, self.rect(), self.font, Qt.TextWordWrap)
         TextSizeHelper.draw_text2(painter, self.font, self.text, self.color, QRectF(self.rect()))
 
+
+class MapImageHelper:
+    __BASE64_MAP_IMAGES__ = {}
+
+    @classmethod
+    def get_map_image_base_64(cls, location_string, size=250, zoom=10):
+        # return ""
+        if location_string in cls.__BASE64_MAP_IMAGES__:
+            return cls.__BASE64_MAP_IMAGES__[location_string]
+
+        from credentials import MapQuestCredentials
+        try:
+            encoded = quote(location_string)
+            response = requests.get(f"https://www.mapquestapi.com/staticmap/v5/map?key"
+                                    f"={MapQuestCredentials.get_api_key()}"
+                                    f"&center={encoded}"
+                                    f"&size={size},{size}"
+                                    f"&zoom={zoom}"
+                                    f"&locations={encoded}",
+                                    stream=True)
+        except Exception as e:
+            return
+        if response.status_code == 200:
+
+            import base64
+
+            uri = ("data:" +
+                   response.headers['Content-Type'] + ";" +
+                   "base64," + base64.b64encode(response.content).decode("utf-8"))
+
+            cls.__BASE64_MAP_IMAGES__[location_string] = f"<img src='{uri}'>"
+
+        else:
+            cls.__BASE64_MAP_IMAGES__[location_string] = ""
+
+        return cls.__BASE64_MAP_IMAGES__[location_string]

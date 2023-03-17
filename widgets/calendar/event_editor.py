@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Union
 
-from PyQt5.QtCore import pyqtSignal, Qt, QTimeZone, QDateTime
+from PyQt5.QtCore import pyqtSignal, Qt, QTimeZone, QDateTime, QSize
 from PyQt5.QtGui import QIcon, QCloseEvent, QColor
 from PyQt5.QtWidgets import QWidget, QFormLayout, QLineEdit, QPushButton, QHBoxLayout, QComboBox, QCheckBox, \
     QDateTimeEdit, QLabel, QTextEdit, QMessageBox, QRadioButton, QButtonGroup
@@ -237,6 +237,7 @@ class EventEditor(CustomWindow):
         self.emoji_code = icon
         if icon is not None:
             self.icon_button.setIcon(EmojiPicker.get_emoji_icon_from_unicode(icon, 32))
+            self.icon_button.setIconSize(QSize(26, 26))
 
         self.start_time.setDateTime(self.event_instance().start)
         self.end_time.setDateTime((self.event_instance().end - timedelta(days=1)) if self.event_instance().all_day

@@ -5,7 +5,7 @@ termcolor
 qrainbowstyle==0.6.5
 python-dateutil
 requests
-caldav
+caldav==1.2.1
 icalendar
 recurrent
 mutagen

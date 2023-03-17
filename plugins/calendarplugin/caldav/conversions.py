@@ -1,7 +1,7 @@
 import datetime
 import re
 import uuid
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Tuple
 
 from dateutil.tz import tzlocal
 from tzlocal import get_localzone
@@ -16,6 +16,13 @@ from dateutil import rrule
 from vobject.icalendar import RecurringComponent
 
 from plugins.calendarplugin.calendar_plugin import Event, Calendar, Alarm, CalendarAccessRole, Todo, EventInstance
+
+
+class MockVobjectInstance:
+    def __init__(self, vevents: List[RecurringComponent]):
+        self.contents = {
+            'vevent': vevents
+        }
 
 
 class CalDavObjectUpdate:
@@ -40,7 +47,15 @@ class CalDavConversions:
     RECURRENCE_ID = 'recurrence-id'
     EXDATE = 'exdate'
     VALARM = 'valarm'
+    ACTION = 'action'
+    TRIGGER = 'trigger'
     COLOR = 'ffcolor'
+
+    icalendar_import_fields = {
+        'cal_name': ['X-WR-CALNAME'],
+        'cal_id': ['X-WR-RELCALID'],
+        'cal_desc': ['X-WR-CALDESC']
+    }
 
     @classmethod
     def calendar_from_cal_dav_cal(cls, cal: caldav.Calendar) -> Calendar:
@@ -98,6 +113,14 @@ class CalDavConversions:
             ical.add(cls.COLOR, event.bg_color.name())
         ical.add(cls.LOCATION, event.location)
         ical.add(cls.DESCRIPTION, event.description)
+        if event.alarm:
+            alarm = icalendar.Alarm()
+            alarm.add(cls.ACTION, event.alarm.action)
+            if event.alarm.description:
+                alarm.add(cls.DESCRIPTION, event.alarm.description)
+            alarm.add(cls.TRIGGER, event.alarm.trigger)
+            alarm.get(cls.TRIGGER).params = icalendar.Parameters()  # weird compat issues
+            ical.add_component(alarm)
         if event.recurrence:
             rec_str = re.sub('.*\n?RRULE:', '', str(event.recurrence))
             ical.add(cls.RRULE, icalendar.vRecur.from_ical(rec_str))
@@ -212,6 +235,53 @@ class CalDavConversions:
                                     datetime.timedelta(days=days_in_future))
         else:
             return cls.event_from_recurring_component(expandable_event, event.calendar)
+
+    @classmethod
+    def load_all_from_ical_text(cls, ical_string: str, uri: str, calendar_id: str = None,
+                                calendar_name: str = None, fg_color=None, bg_color=None) -> Tuple[Calendar,
+                                                                                           Dict[str, Event],
+                                                                                           Dict[str, icalendar.Calendar]]:
+        cal = icalendar.Calendar.from_ical(ical_string)
+        cal_data = {
+            'cal_name': 'Calendar',
+            'cal_id': calendar_id if calendar_id else uri
+        }
+        for field, accessors in cls.icalendar_import_fields.items():
+            for accessor in accessors:
+                if cal.get(accessor):
+                    cal_data[field] = cal.get(accessor)
+                    break
+
+        calendar = Calendar(
+            name=calendar_name if calendar_name else cal_data['cal_name'],
+            calendar_id=cal_data['cal_id'],
+            access_role=CalendarAccessRole.READER,
+            fg_color=fg_color if fg_color else QColor(255, 255, 255),
+            bg_color=bg_color if bg_color else QColor('#7986cb'),
+            data={},
+        )
+
+        vevents = {}
+        events = {}
+        ical_events = {}
+        for comp in vobject.readComponents(ical_string):
+            for comp2 in comp.components():
+                if isinstance(comp2, RecurringComponent):
+                    if comp2.uid.value not in vevents:
+                        vevents[comp2.uid.value] = []
+                    vevents[comp2.uid.value].append(comp2)
+
+        for uid, components in vevents.items():
+            event = CalDavConversions.event_from_vobject_instance(MockVobjectInstance(components), calendar)
+            ical = icalendar.Calendar()
+            for e in [icalendar.Event.from_ical(c.serialize()) for c in components]:
+                ical.add_component(e)
+
+            events[uid] = event
+            ical_events[uid] = ical
+
+        return calendar, events, ical_events
+
 
     @classmethod
     def todo_from_vtodo(cls, td: RecurringComponent, calendar: Calendar) -> Todo:

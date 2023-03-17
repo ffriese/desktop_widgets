@@ -160,7 +160,24 @@ class CalendarData:
 
 
 class CalendarPlugin(BasePlugin):
-    COLORS = {}
+    COLORS = {
+            1: "#7986cb",  # Lavender
+            2: "#33b679",  # Sage
+            3: "#8e24aa",  # Grape
+            4: "#e67c73",  # Flamingo
+            5: "#f6c026",  # Banana
+            6: "#f5511d",  # Tangerine
+            7: "#039be5",  # Peacock
+            8: "#616161",  # Graphite
+            9: "#3f51b5",  # Blueberry
+            10: "#0b8043",  # Basil
+            11: "#d60000"  # Tomato
+        }
+
+    COLOR_DICT = {
+        None: {},
+        **{str(k): {'fg_color': QColor('#f1f1f1'), 'bg_color': QColor(v)} for k, v in COLORS.items()}
+    }
 
     class CacheMode(Enum):
         FORCE_REFRESH = 1,
@@ -206,8 +223,9 @@ class CalendarPlugin(BasePlugin):
                      ) -> Union[Event, List[EventInstance]]:
         raise NotImplementedError()
 
-    def get_event_colors(self) -> Dict[Any, QColor]:
-        raise NotImplementedError()
+    @classmethod
+    def get_event_colors(cls) -> Dict[Any, Dict[str, QColor]]:
+        return cls.COLOR_DICT
 
 
 class CalendarOfflineCache:

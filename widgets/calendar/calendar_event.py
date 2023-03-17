@@ -1,8 +1,10 @@
 import logging
 import math
 import re
+import textwrap
 import webbrowser
 from datetime import datetime, date, timedelta
+from pathlib import Path
 from typing import Union
 
 from PyQt5.QtCore import pyqtSignal, Qt, QRect
@@ -15,7 +17,7 @@ from plugins.calendarplugin.calendar_plugin import Event, CalendarAccessRole, Ev
 from plugins.weather.iconsets import IconSet
 from plugins.weather.weather_data_types import Temperature, WeatherDescription, Wind
 from plugins.weather.weather_plugin import WeatherReport
-from helpers.widget_helpers import SideGrip
+from helpers.widget_helpers import SideGrip, MapImageHelper
 from widgets.tool_widgets import EmojiPicker
 from widgets.tool_widgets.widget import Widget
 
@@ -45,33 +47,6 @@ class CalendarEventWidget(Widget):
             return CalendarEventWidget.__ICONS__[path][size]
         except ValueError:
             return fallback
-
-    @classmethod
-    def get_map_image_base_64(cls, location_string):
-        # return ""
-        if location_string in cls.__MAP_IMAGES__:
-            return cls.__MAP_IMAGES__[location_string]
-
-        ## move to own class
-        import requests
-
-        from credentials import MapQuestCredentials
-        response = requests.get(f"https://www.mapquestapi.com/staticmap/v5/map?key"
-                      f"={MapQuestCredentials.get_api_key()}&center={location_string}&size=250,250&zoom=10&locations={location_string}", stream=True)
-        if response.status_code == 200:
-
-            import base64
-
-            uri = ("data:" +
-                   response.headers['Content-Type'] + ";" +
-                   "base64," + base64.b64encode(response.content).decode("utf-8"))
-
-            cls.__MAP_IMAGES__[location_string] = f"<img src='{uri}'>"
-
-        else:
-            cls.__MAP_IMAGES__[location_string] = ""
-
-        return cls.__MAP_IMAGES__[location_string]
 
     def __init__(self, parent, event: Union[Event, EventInstance], begin, end):
         super(CalendarEventWidget, self).__init__(parent=parent)
@@ -147,7 +122,12 @@ class CalendarEventWidget(Widget):
             if icon:
                 self.icon = EmojiPicker.get_emoji_icon_from_unicode(icon, 32)
             else:
-                self.icon = None
+                cal_icon = Path(PathManager.
+                                get_calendar_default_icons_path(f'{self.event_instance().calendar.name}.png'))
+                if cal_icon.exists():
+                    self.icon = QIcon(str(cal_icon.absolute()))
+                else:
+                    self.icon = None
         except KeyError:
             self.summary = None
             self.icon = None
@@ -246,9 +226,9 @@ class CalendarEventWidget(Widget):
                    f"</td><td>{self.time}</td></tr>" if self.time else ''
         loc_str = f"<tr><td>{self.get_icon_base_64(PathManager.get_icon_path('location.png'), 10, '<b>Location:</b>')} " \
                   f"</td><td>{self.location}</td></tr>  <tr><td></td><td>" \
-                  f"{self.get_map_image_base_64(self.location)}</td></tr>" if self.location else ''
+                  f"{MapImageHelper.get_map_image_base_64(self.location)}</td></tr>" if self.location else ''
         desc_str = f"<tr><td>{self.get_icon_base_64(PathManager.get_icon_path('description.png'), 10, '<b>Description:</b>')} " \
-                   f"</td><td>{self.description}</td></tr>" if self.description else ''
+                   f"</td><td>{textwrap.shorten(self.description, 2000)}</td></tr>" if self.description else ''
         alarm_str = f"<tr><td>{self.get_icon_base_64(PathManager.get_icon_path('bell.png'), 10, '<b>Alarm:</b>')} " \
                     f"</td><td>{self.event_instance().alarm.alarm_time.strftime('%H:%M')}</td></tr>" if self.event_instance().alarm else ''
         recurrence = f"<tr><td>{self.get_icon_base_64(PathManager.get_icon_path('recurring.png'), 10, '<b>Recurrence:</b>')} " \
@@ -364,6 +344,10 @@ class CalendarEventWidget(Widget):
             new_end = datetime.combine(new_end, datetime.min.time())
             self.date_change_request.emit(new_start, new_end)
 
+    def reset_size_to_original(self):
+        self.parent().resizeEvent(QResizeEvent(self.parent().size(),
+                                               self.parent().size()))
+
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
         if hasattr(self, 'top_grip'):
@@ -470,6 +454,6 @@ class CalendarEventWidget(Widget):
 
         if not self.event_instance().is_synchronized():
             if self.root_event().recurrence:  # if rec_icon also present, shift sync icon to the left
-                sync_icon_pos[0] -= (icon_size + icon_margin)
-            sync_icon = QIcon(PathManager.get_icon_path('cloud-sync-icon.png'))
+                sync_icon_pos = (sync_icon_pos[0]-(icon_size + icon_margin), sync_icon_pos[1])
+            sync_icon = QIcon(PathManager.get_icon_path('cloud-fail.png'))
             sync_icon.paint(painter, QRect(*sync_icon_pos, icon_size, icon_size))

@@ -163,10 +163,6 @@ class PathManager:
         return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'emojis'], filename)
 
     @staticmethod
-    def get_emoji_category_path(filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'emojis', 'categories'], filename)
-
-    @staticmethod
     def get_calendar_default_icons_path(filename=None):
         return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'default_calendar_icons'], filename)
 
