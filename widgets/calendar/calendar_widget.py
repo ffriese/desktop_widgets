@@ -26,6 +26,7 @@ from widgets.calendar.event_editor import EventEditor
 from widgets.calendar.multi_day_view import MultiDayView
 from helpers.tools import PathManager
 from widgets.tool_widgets import LocationPicker, QSpinBoxAction, ListSelectAction, CustomMessageBox
+from widgets.tool_widgets.toaster import QToaster
 from widgets.tool_widgets.widget_actions import QHourRangeAction
 
 
@@ -64,6 +65,8 @@ class CalendarWidget(BaseWidget):
         self.updating_calendars = False
         self.updating_weather = False
         self.visibility_lock = False
+
+        self.notifications = {}
 
         self.mouse_down_loc = None
         self.mouse_cur_loc = None
@@ -193,7 +196,52 @@ class CalendarWidget(BaseWidget):
                 self.async_update_calendars()
             if self.weather_plugin.last_update + timedelta(hours=1) < now:
                 self.async_update_weather()
+        self.check_notifications()
         self.update()
+
+    def check_notifications(self):
+        now = datetime.now().astimezone(tzlocal())
+        # check for events that are starting soon (or have started already)
+        for dw in self.view.day_widgets:
+            for w in dw.collect_event_widgets():
+                self.check_notification_for_event(w.event_instance(), now)
+
+    def check_notification_for_event(self, event: Union[Event, EventInstance], now):
+        if isinstance(event, EventInstance):
+            event_instance = event.instance
+        else:
+            event_instance = event
+        uid = event_instance.get_unique_id()
+        # ignore events that have already been notified
+        if uid in self.notifications and 'STARTED' in self.notifications[uid]:
+            return
+        event_start = event_instance.start.astimezone(tzlocal())
+        seconds_until = (event_start - now).total_seconds()
+
+        UPCOMING_MINUTES = 60
+        UPCOMING_SECONDS = UPCOMING_MINUTES * 60
+        if (event_instance.start-event_instance.end).total_seconds() < seconds_until < UPCOMING_SECONDS:
+            # print(f'{seconds_until}: {event_instance.title}')
+            # check upcoming (less than 10 minutes left)
+            was_upcoming = uid in self.notifications and 'UPCOMING' in self.notifications[uid]
+
+            if not was_upcoming and \
+                    0.0 <= seconds_until <= (UPCOMING_SECONDS):
+                self.notify(event_instance, 'UPCOMING',
+                            f'{event_instance.title}\nwill start soon.\n({event_start.strftime("%H:%M")})'
+                            )
+            # check started (and still running)
+            elif (event_instance.start-event_instance.end).total_seconds() <= seconds_until <= 0.0:
+                self.notify(event_instance, 'STARTED',
+                            f'{event_instance.title}\njust began.\n({event_start.strftime("%H:%M")})'
+                            )
+
+    def notify(self, event_instance: Event, notification_type: str, msg: str):
+        uid = event_instance.get_unique_id()
+        if uid not in self.notifications:
+            self.notifications[uid] = {}
+        self.notifications[uid][notification_type] = msg
+        QToaster.showMessage(self, msg, timeout=80000, desktop=True, corner=Qt.TopRightCorner)
 
     def hide_cal(self):
         if not self.visibility_lock:
@@ -368,6 +416,7 @@ class CalendarWidget(BaseWidget):
                 self.calendar_data[plugin.__class__.__name__] = data
             self.update_view()
             self.try_to_apply_cache()
+            self.check_notifications()
 
     def update_view(self):
         self.view.remove_all()
