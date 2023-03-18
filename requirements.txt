@@ -10,5 +10,4 @@ icalendar
 recurrent
 mutagen
 psutil
-PyGObject; platform_system == 'Linux' or platform_system == 'Darwin'
 pypiwin32; platform_system == 'Windows'

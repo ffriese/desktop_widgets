@@ -10,14 +10,9 @@ from PyQt5.QtWidgets import QFileIconProvider
 
 from plugins.base import BasePlugin
 import psutil
-if not sys.platform.startswith('win'):
-    import gi
-    gi.require_version('Wnck', '3.0')
-    gi.require_version('Gtk', '3.0')
-    from gi.repository import Gtk, Wnck
 
 
-from PyQt5.QtGui import QIcon, QImage, QPixmap
+from PyQt5.QtGui import QIcon
 
 # TODO: USE NETHOGS FOR INDIVIDUAL BANDWIDTH STATS
 
@@ -72,28 +67,6 @@ class NetworkPlugin(BasePlugin):
         info = QFileInfo(path)
         icon = QIcon(provider.icon(info))
         return icon
-
-    def get_icons(self):
-        self.log_info('GET ICONS')
-        screen = Wnck.Screen.get_default()
-        while Gtk.events_pending():
-            Gtk.main_iteration()
-
-        new_pids = []
-        for w in screen.get_windows():
-            pid = w.get_pid()
-            new_pids.append(pid)
-            if not self.icons.keys().__contains__(pid):
-                icon = QIcon(QPixmap.fromImage(QImage.fromData(w.get_icon().save_to_bufferv("png", [], [])[1])))
-                self.icons[pid] = icon
-
-        remove_pids = []
-        for old_id in self.icons.keys():
-            if not new_pids.__contains__(old_id):
-                remove_pids.append(old_id)
-
-        #for id in remove_pids:
-        #    self.icons.pop(id)
 
     def setup(self, *args):
         self.log_info('SETUP', args)
