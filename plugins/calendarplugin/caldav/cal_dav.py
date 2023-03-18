@@ -224,20 +224,5 @@ class CalDavPlugin(CalendarPlugin):
         event_list = {}
 
         for c_id, cal in self.caldav_calendars.items():
-            for e_id, ev in cal.events.items():
-                if ev.recurrence:
-                    # rec = str(ev.recurrence).replace("\n", "")
-                    # print(f'recurring event: {ev.title}: {rec}')
-                    instances = CalDavConversions.expand_event(ev, cal.ical_events[e_id], start, end)
-                    if instances:
-                        # instance_desc = [f'{ev.instance.title}: {ev.instance.start}' for ev in instances]
-                        # print(f' instances: {instance_desc}')
-                        event_list[e_id] = instances
-                else:
-                    try:
-                        if ev.start < end and ev.end > start:
-                            # print(f'normal event: {ev.title}: {ev.start}')
-                            event_list[e_id] = ev
-                    except TypeError as e:
-                        print(ev.start, end, ev.end, start, e)
+            event_list.update(CalDavConversions.expand_events(cal.events, cal.ical_events, start, end))
         return event_list

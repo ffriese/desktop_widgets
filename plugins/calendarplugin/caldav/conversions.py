@@ -223,6 +223,25 @@ class CalDavConversions:
                               ) for instance in cls.expand_ical_event(ical_event, start, end)]
 
     @classmethod
+    def expand_events(cls, event_dict, ical_event_dict, start: datetime.datetime, end: datetime.datetime) -> \
+            Dict[str, Union[Event, List[EventInstance]]]:
+        event_list = {}
+        for e_id, ev in event_dict.items():
+
+            if ev.recurrence:
+                instances = CalDavConversions.expand_event(ev, ical_event_dict[e_id], start, end)
+                if instances:
+                    event_list[e_id] = instances
+            else:
+                try:
+                    if ev.start < end and ev.end > start:
+                        event_list[e_id] = ev
+                except TypeError as e:
+                    print(ev.start, end, ev.end, start, e)
+        return event_list
+
+
+    @classmethod
     def expand_caldav_event(cls, raw_event: caldav.Event, event: Event,
                             days_in_future: int, days_in_past: int) -> Union[Event, List[EventInstance]]:
         expandable_event = raw_event.vobject_instance.vevent
