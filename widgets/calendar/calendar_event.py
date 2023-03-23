@@ -48,7 +48,7 @@ class CalendarEventWidget(Widget):
         except ValueError:
             return fallback
 
-    def __init__(self, parent, event: Union[Event, EventInstance], begin, end):
+    def __init__(self, parent: "TimelineWidget", event: Union[Event, EventInstance], begin, end):
         super(CalendarEventWidget, self).__init__(parent=parent)
         self.__mousePressPos = None
         self.__mouseMovePos = None
@@ -358,7 +358,7 @@ class CalendarEventWidget(Widget):
         if hasattr(self, 'left_grip'):
             self.left_grip.move(0, 0)
             self.right_grip.setGeometry(
-                  self.rect().left() + self.rect().width() -3, 0,
+                  self.rect().left() + self.rect().width() - 3, 0,
                   3, self.rect().height())
 
     def show_time_tooltip(self, rect: QRect, direction=Qt.Vertical):
@@ -370,13 +370,13 @@ class CalendarEventWidget(Widget):
         else:
             start_day, end_day = self.rect_to_days(rect)
             start_date = self.parent().start_date + timedelta(days=start_day)  # type: datetime.date
-            end_date = self.parent().start_date + timedelta(days=end_day) # type: datetime.date
+            end_date = self.parent().start_date + timedelta(days=end_day)  # type: datetime.date
             if start_date == end_date:
                 self.tooltip_widget_label.setText(f"{start_date.strftime('%d.%m.')}")
             else:
                 self.tooltip_widget_label.setText(f"{start_date.strftime('%d.%m.')} - {end_date.strftime('%d.%m.')}")
 
-        self.tooltip_widget.resize(self.width(), 20 * self.parent().width()/self.width())
+        self.tooltip_widget.resize(self.width(), int(20 * self.parent().width()/self.width()))
         self.tooltip_widget.show()
 
     def mousePressEvent(self, event):
@@ -393,13 +393,13 @@ class CalendarEventWidget(Widget):
         if self.event_instance().calendar.access_role in [CalendarAccessRole.OWNER, CalendarAccessRole.WRITER]:
             if event.buttons() == Qt.LeftButton:
                 # adjust offset from clicked point to origin of widget
-                currPos = self.mapToGlobal(self.pos())
-                globalPos = event.globalPos()
-                diff = globalPos - self.__mouseMovePos
-                newPos = self.mapFromGlobal(currPos + diff)
-                self.parent()._event_got_moved(self, newPos)
+                curr_pos = self.mapToGlobal(self.pos())
+                global_pos = event.globalPos()
+                diff = global_pos - self.__mouseMovePos
+                new_pos = self.mapFromGlobal(curr_pos + diff)
+                self.parent()._event_got_moved(self, new_pos)
 
-                self.__mouseMovePos = globalPos
+                self.__mouseMovePos = global_pos
 
         super().mouseMoveEvent(event)
 
