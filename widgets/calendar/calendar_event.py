@@ -48,7 +48,7 @@ class CalendarEventWidget(Widget):
         except ValueError:
             return fallback
 
-    def __init__(self, parent: "TimelineWidget", event: Union[Event, EventInstance], begin, end):
+    def __init__(self, parent, event: Union[Event, EventInstance], begin, end):
         super(CalendarEventWidget, self).__init__(parent=parent)
         self.__mousePressPos = None
         self.__mouseMovePos = None
