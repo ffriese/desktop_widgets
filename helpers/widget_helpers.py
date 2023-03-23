@@ -250,8 +250,8 @@ class CalendarHelper:
                     if rect_func is not None:
                         rect = rect_func(event)  # type: QRect
                         top_offset_percentage = (i / number_of_columns)
-                        height = col_height * event_column_span / number_of_columns-1
-                        rect.setTop(col_height * top_offset_percentage + rect.top())
+                        height = int(col_height * event_column_span / number_of_columns-1)
+                        rect.setTop(int(col_height * top_offset_percentage + rect.top()))
                         rect.setHeight(height)
                         event.setGeometry(rect)
 
