@@ -11,10 +11,10 @@ from PyQt5 import QtCore
 from PyQt5.QtWebEngineWidgets import QWebEngineView                            #
 ################################################################################
 from PyQt5.QtGui import QIcon, QFont, QScreen
-from PyQt5.QtCore import QSettings, QObject, QVariant, pyqtSlot, QSize, QPoint, QRect
+from PyQt5.QtCore import QSettings, QObject, QVariant, pyqtSlot, Qt, QRect
 from PyQt5.QtWidgets import *
 from threading import Lock
-from typing import List, Type, Dict, cast, Union
+from typing import List, Type, Dict, cast
 
 import signal
 
@@ -25,6 +25,8 @@ from helpers.tools import PathManager
 from widgets.music import MusicWidget
 from widgets.network import NetworkWidget
 import logging
+
+from widgets.tool_widgets.onboarding import OnboardingDialog
 
 
 class Application(QApplication):
@@ -94,6 +96,7 @@ class DesktopWidgetsCore(QObject):
 
     def __init__(self, config='default', available_widgets=None):
         super(DesktopWidgetsCore, self).__init__()
+        self.onboarding_dialog = None
         signal.signal(signal.SIGINT, lambda *a: DesktopWidgetsCore.app.quit())
         DesktopWidgetsCore.app.startTimer(200)
         DesktopWidgetsCore.app.setQuitOnLastWindowClosed(False)  # Otherwise DebugWindow kills entire application on close
@@ -151,18 +154,22 @@ class DesktopWidgetsCore(QObject):
                 self.settings.endGroup()
                 self.settings.sync()
             if not active_widgets:
-                self.log('TODO: SHOW WIDGET CHOOSER!!')
+                self.log('no active widgets found. activate from tray.')
+                OnboardingDialog.highlight_tray_icon(self.tray_icon, loop_count=10)
             for w in active_widgets:
                 if w in self.available_widgets.keys():
                     self.activate_widget(self.available_widgets[w])
                 else:
                     self.log('%s was not activated, because it is not registered' % w)
+        else:
+            self.show_onboarding_dialog()
         self.check_widget_positions()
 
-
-    def show_widget_chooser(self):
-        ...
-
+    def show_onboarding_dialog(self):
+        self.onboarding_dialog = OnboardingDialog(None, flags=Qt.WindowCloseButtonHint | Qt.Window)
+        self.onboarding_dialog.highlight_tray_icon(self.tray_icon, loop_count=-1)
+        self.onboarding_dialog.widget_class_activated.connect(self.activate_widget)
+        self.onboarding_dialog.show()
 
     def open_widget(self):
         action = self.sender()
@@ -210,7 +217,6 @@ class DesktopWidgetsCore(QObject):
             for key in widget_settings:
                 widget.apply_settings(key, widget_settings[key])
 
-
         # else:
         #     widget.show()
 
@@ -226,6 +232,8 @@ class DesktopWidgetsCore(QObject):
         widget.context_menu.addAction(self.quit_action)
         widget.start()
         widget.show()
+        widget.activateWindow()
+        widget.raise_()
 
         self.update_settings('active_widgets', [w.__class__.__name__ for w in self.widgets], sender=self)
 
