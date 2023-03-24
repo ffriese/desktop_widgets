@@ -58,11 +58,13 @@ class WeatherReport:
                 interpolated.timestamp += timedelta(minutes=29)
                 for k in interpolated.data.keys():
                     this = interpolated.data[k]
-                    other = hourly[list(hourly.values())[i + 1].timestamp].data[k]
                     try:
+                        other = hourly[list(hourly.values())[i + 1].timestamp].data[k]
                         interpolated.data[k] = k.interpolate(this,
                                                              other)
-
+                    except KeyError as ke:
+                        logging.getLogger(self.__class__.__name__).log(level=logging.ERROR,
+                                                                       msg=f'Could not interpolate {k} {ke}')
                     except NotImplementedError as ne:
                         logging.getLogger(self.__class__.__name__).log(level=logging.ERROR,
                                                                        msg=f'Could not interpolate {k} {ne}')
