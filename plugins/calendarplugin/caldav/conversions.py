@@ -1,4 +1,5 @@
 import datetime
+import logging
 import re
 import uuid
 from typing import List, Union, Dict, Tuple
@@ -136,8 +137,18 @@ class CalDavConversions:
     def event_from_vobject_instance(cls, vobject_instance: vobject, calendar: Calendar) -> Event:
         vevent_list: List[RecurringComponent] = vobject_instance.contents['vevent']
         if isinstance(vevent_list, list):
-            root_component = [vev for vev in vevent_list if cls.RECURRENCE_ID not in vev.contents][0]
+            root_components = [vev for vev in vevent_list if cls.RECURRENCE_ID not in vev.contents]
             sub_components = [vev for vev in vevent_list if cls.RECURRENCE_ID in vev.contents]
+            if not root_components:
+                logging.log(level=logging.WARN,
+                            msg=f'POTENTIALLY ERRONEOUS EVENT FOUND. NO COMPONENTS WITHOUT RECURRENCE ID!'
+                                f' -> REMOVING REC-ID FROM FIRST "SUB"-COMPONENT. '
+                                f' MAY PRODUCE UNPREDICTABLE ERRORS!')
+                assert sub_components
+                root_component = sub_components.pop(0)
+                root_component.contents.pop(cls.RECURRENCE_ID)
+            else:
+                root_component = root_components[0]
             return CalDavConversions.event_from_recurring_component(
                 root_component, calendar, rruleset=root_component.rruleset,
                 subcomponents={

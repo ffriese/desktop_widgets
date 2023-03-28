@@ -63,8 +63,8 @@ class WebCalPluginInstance(ReadOnlyWebCalPlugin):
     def update_synchronously(self, days_in_future: int, days_in_past: int,
                              cache_mode=CalendarPlugin.CacheMode.FORCE_REFRESH,
                              *args, **kwargs) -> Union[CalendarData, None]:
-
-        if cache_mode == CalendarPlugin.CacheMode.FORCE_REFRESH:
+        self.log_info('GOT TO MAIN METHOD', cache_mode, args, kwargs)
+        if cache_mode == CalendarPlugin.CacheMode.FORCE_REFRESH or not self.calendar:
             try:
                 self.calendar, self.events, self.ical_events = CalDavConversions.load_all_from_ical_text(
                     ical_string=self.get_data(),
