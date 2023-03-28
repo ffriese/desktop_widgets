@@ -60,6 +60,6 @@ jobs:
       if: github.ref == 'refs/heads/pyinstaller_build'
       run: |
         pip install pyinstaller
-        python -m build.py
+        python build.py
 
 
