@@ -1,4 +1,4 @@
-
+import os
 import site
 from pathlib import Path
 
@@ -10,7 +10,7 @@ def add_data(dir_name, from_site_packages=True):
     if from_site_packages:
         for path in site.getsitepackages():
             if Path(path).joinpath(dir_name).exists():
-                return "--add-data", f"{Path(path).joinpath(dir_name).absolute()};{dir_name}"
+                return "--add-data", f"{Path(path).joinpath(dir_name).absolute()}{os.pathsep}{dir_name}"
         raise FileNotFoundError(f'{dir_name} not found in site-packages ({site.getsitepackages()}')
     else:
         return "--add-data", f"{dir_name};{dir_name}"
