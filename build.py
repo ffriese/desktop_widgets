@@ -13,7 +13,7 @@ def add_data(dir_name, from_site_packages=True):
                 return "--add-data", f"{Path(path).joinpath(dir_name).absolute()}{os.pathsep}{dir_name}"
         raise FileNotFoundError(f'{dir_name} not found in site-packages ({site.getsitepackages()}')
     else:
-        return "--add-data", f"{dir_name};{dir_name}"
+        return "--add-data", f"{dir_name}{os.pathsep}{dir_name}"
 
 
 if __name__ == '__main__':
