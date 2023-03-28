@@ -68,7 +68,7 @@ class EmojiHelper:
     def initialize(cls):
 
         # Read json data on module load to be cached
-        with open(os.path.join(os.path.dirname(__file__), 'emoji.json'), "r") as full_data:
+        with open(os.path.join(os.path.dirname(__file__), '../../resources/emojis/emoji.json'), "r") as full_data:
             # Load and parse emoji data from json into EmojiChar objects
             cls._emoji_data: List[EmojiChar] = [EmojiChar(data_blob) for data_blob in json.loads(full_data.read())]
 

@@ -383,7 +383,9 @@ if __name__ == '__main__':
     stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setFormatter(formatter)
     stream_handler.setLevel(logging.INFO)
-    logger.addHandler(stream_handler)
+    if hasattr(stream_handler, 'stream'):
+        # don't add if built without console-support
+        logger.addHandler(stream_handler)
 
     sys.stdout = StreamLogger(logger, logging._nameToLevel[STD_OUT_LOG_LEVEL])
     sys.stderr = StreamLogger(logger, logging._nameToLevel[STD_ERR_LOG_LEVEL])
