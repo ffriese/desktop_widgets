@@ -63,5 +63,11 @@ jobs:
       run: |
         pip install pyinstaller
         python build.py
+    - name: Create Release-Artifact
+      if: github.ref == 'refs/heads/pyinstaller_build'
+      - uses: actions/upload-artifact@v2
+        with:
+          name: desktop-widgets-0.0.1a
+          path: dist/*
 
 
