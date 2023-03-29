@@ -46,6 +46,14 @@ class Builder:
                 print(f'deploying {file} to {dst}')
                 shutil.copy2(Path(src).joinpath(file), Path(dst).joinpath(file))
 
+    @staticmethod
+    def generate_icon():
+        from PyQt5.QtWidgets import QApplication
+        app = QApplication([])
+        from PyQt5.QtWidgets import QStyle
+        app.style().standardIcon(QStyle.SP_FileDialogListView).pixmap(256, 256).\
+            save('resources/icons/app_icon.ico', 'ICO')
+
     # noinspection SpellCheckingInspection
     def build(self):
         PyInstaller.__main__.run([
@@ -54,6 +62,7 @@ class Builder:
             "--noconfirm",
             "--noconsole",
             "--uac-admin",
+            "--icon", "resources/icons/app_icon.ico",
             *self.add_data('qrainbowstyle'),
             *self.add_data("resources", from_site_packages=False),
         ])
