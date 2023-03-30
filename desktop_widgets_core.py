@@ -381,24 +381,26 @@ if __name__ == '__main__':
     # formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
     file_handler.setFormatter(formatter)
     handlers.append(file_handler)
-    stream_handler = logging.StreamHandler(sys.stdout)
-    stream_handler.setFormatter(formatter)
-    stream_handler.setLevel(logging.INFO)
-    if hasattr(stream_handler, 'stream'):
-        # don't add if built without console-support
-        handlers.append(stream_handler)
+    if sys.stdout is not None:
+        stream_handler = logging.StreamHandler(sys.stdout)
+        stream_handler.setFormatter(formatter)
+        stream_handler.setLevel(logging.INFO)
+        if hasattr(stream_handler, 'stream'):
+            # don't add if built without console-support
+            handlers.append(stream_handler)
 
     for handler in handlers:
         logger.addHandler(handler)
 
     sys.stdout = StreamLogger(logger, logging._nameToLevel[STD_OUT_LOG_LEVEL])
     sys.stderr = StreamLogger(logger, logging._nameToLevel[STD_ERR_LOG_LEVEL])
-
+    logging.getLogger(f'desktopwidgets.{DesktopWidgetsCore.__name__.upper()}'). \
+        log(level=logging.INFO, msg=f'got {len(handlers)} handlers:')
     for handler in handlers:
         logging.getLogger(f'desktopwidgets.{DesktopWidgetsCore.__name__.upper()}').\
             log(level=logging.INFO, msg=f'enabled stream_handler {handler}. has stream: {hasattr(handler, "stream")} ')
         logging.getLogger(f'desktopwidgets.{DesktopWidgetsCore.__name__.upper()}').\
-            log(level=logging.INFO, msg=f'{handler.__dict__}')
+            log(level=logging.INFO, msg=f'{handler.__dict__.keys()}')
         logging.getLogger(f'desktopwidgets.{DesktopWidgetsCore.__name__.upper()}'). \
             log(level=logging.INFO, msg=f'({handler.stream if hasattr(handler, "stream") else "NO STREAM"})')
 
