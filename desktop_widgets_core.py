@@ -396,8 +396,11 @@ if __name__ == '__main__':
 
     for handler in handlers:
         logging.getLogger(f'desktopwidgets.{DesktopWidgetsCore.__name__.upper()}').\
-            log(level=logging.INFO, msg=f'enabled stream_handler {handler}. has stream: {hasattr(handler, "stream")} '
-                                        f'({handler.stream if hasattr(handler, "stream") else ""})')
+            log(level=logging.INFO, msg=f'enabled stream_handler {handler}. has stream: {hasattr(handler, "stream")} ')
+        logging.getLogger(f'desktopwidgets.{DesktopWidgetsCore.__name__.upper()}').\
+            log(level=logging.INFO, msg=f'{handler.__dict__}')
+        logging.getLogger(f'desktopwidgets.{DesktopWidgetsCore.__name__.upper()}'). \
+            log(level=logging.INFO, msg=f'({handler.stream if hasattr(handler, "stream") else "NO STREAM"})')
 
     logging.getLogger('qrainbowstyle').setLevel(logging.FATAL)
     # logging.getLogger('googleapiclient.discovery').setLevel(logging.ERROR)
