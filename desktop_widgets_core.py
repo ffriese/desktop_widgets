@@ -374,29 +374,38 @@ if __name__ == '__main__':
     STD_OUT_LOG_LEVEL = os.environ.get('STD_OUT_LOG_LEVEL', 'INFO')
     STD_ERR_LOG_LEVEL = os.environ.get('STD_ERR_LOG_LEVEL', 'ERROR')
 
+    handlers = []
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     # formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
     file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+    handlers.append(file_handler)
     stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setFormatter(formatter)
     stream_handler.setLevel(logging.INFO)
     if hasattr(stream_handler, 'stream'):
         # don't add if built without console-support
-        logger.addHandler(stream_handler)
+        handlers.append(stream_handler)
+
+    for handler in handlers:
+        logger.addHandler(handler)
 
     sys.stdout = StreamLogger(logger, logging._nameToLevel[STD_OUT_LOG_LEVEL])
     sys.stderr = StreamLogger(logger, logging._nameToLevel[STD_ERR_LOG_LEVEL])
+
+    for handler in handlers:
+        logging.getLogger(f'desktopwidgets.{DesktopWidgetsCore.__name__.upper()}').\
+            log(level=logging.INFO, msg=f'enabled stream_handler {handler}. has stream: {hasattr(handler, "stream")} '
+                                        f'({handler.stream if hasattr(handler, "stream") else ""})')
 
     logging.getLogger('qrainbowstyle').setLevel(logging.FATAL)
     # logging.getLogger('googleapiclient.discovery').setLevel(logging.ERROR)
     # logging.getLogger('urllib3.connectionpool').setLevel(logging.ERROR)
 
     import faulthandler
-    logging.getLogger(f'desktopwidgets.{DesktopWidgetsCore.__name__.upper()}').log(level=logging.INFO,
-                                                                              msg='enabling fault-handler')
+    logging.getLogger(f'desktopwidgets.{DesktopWidgetsCore.__name__.upper()}').\
+        log(level=logging.INFO, msg='enabling fault-handler')
     faulthandler.enable(open('crash.log', 'a'), all_threads=True)
 
     core = DesktopWidgetsCore(available_widgets=[
