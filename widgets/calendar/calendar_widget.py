@@ -293,7 +293,7 @@ class CalendarWidget(BaseWidget):
         self.async_update_calendars(cache_mode=CalendarPlugin.CacheMode.REFRESH_LATER)
         self.async_update_weather()
 
-        self.try_to_apply_cache()
+        # self.try_to_apply_cache()
 
     def try_to_apply_cache(self):
         try:
@@ -308,10 +308,10 @@ class CalendarWidget(BaseWidget):
                 synced = self.cal_plugin.create_event(ne,
                                                       days_in_future=self.get_display_days_in_future(),
                                                       days_in_past=self.get_display_days_in_past())
-                if (isinstance(synced, list) and synced[0].instance.is_synchronized) or \
-                        (isinstance(synced, Event) and synced.is_synchronized):
+                if (isinstance(synced, list) and synced[0].instance.is_synchronized()) or \
+                        (isinstance(synced, Event) and synced.is_synchronized()):
                     self.event_cache['create'].remove(new_event)
-                    self.log_info('successfully created ', new_event.data)
+                    self.log_info('successfully created ', synced.data)
                     self.display_new_event(synced)
                     if temp_id in self.event_cache['update'].keys():
 
@@ -323,6 +323,7 @@ class CalendarWidget(BaseWidget):
                 else:
                     self.log_info('could not create. kept in cache', new_event)
                     self.display_new_event(new_event)
+                    continue
 
             for update_id in list(self.event_cache['update'].keys()):
                 if update_id.startswith("non-sync"):
@@ -346,8 +347,8 @@ class CalendarWidget(BaseWidget):
                                                       days_in_past=self.get_display_days_in_past(),
                                                       moved_from_calendar=moved_from)
 
-                if (isinstance(synced, list) and synced[0].instance.is_synchronized) or \
-                        (isinstance(synced, Event) and synced.is_synchronized):
+                if (isinstance(synced, list) and synced[0].instance.is_synchronized()) or \
+                        (isinstance(synced, Event) and synced.is_synchronized()):
                     self.event_cache['update'].pop(update_id)
                     self.log_info('successfully updated ', upd_event.data)
                     self.display_new_event(synced)
@@ -361,6 +362,7 @@ class CalendarWidget(BaseWidget):
                 if self.cal_plugin.delete_event(deleted):
                     self.log_info('successfully deleted')
                     self.event_cache['delete'].remove(deleted)
+                    self.view.remove_event(deleted.id)
                 else:
                     self.log_info('could not delete. kept in cache', deleted.data)
                     self.view.remove_event(deleted.id)
@@ -583,8 +585,8 @@ class CalendarWidget(BaseWidget):
                                                      moved_from_calendar=old_calendar if
                                                      event.calendar.id != old_calendar.id else None)
 
-        if (isinstance(updated_event, list) and updated_event[0].instance.is_synchronized) or \
-                (isinstance(updated_event, Event) and updated_event.is_synchronized):
+        if (isinstance(updated_event, list) and updated_event[0].instance.is_synchronized()) or \
+                (isinstance(updated_event, Event) and updated_event.is_synchronized()):
             pass
         else:
             self.log_warn('trying to update non-synchronized event ', updated_event.__dict__)

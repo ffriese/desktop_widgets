@@ -147,7 +147,7 @@ class CalDavPlugin(CalendarPlugin):
             return True
         except Exception as e:
             self.log_warn(e)
-            return True
+            return False
 
     # todo: move back to generic implementation, as this code is not plugin-specific
     def delete_event_instance(self, instance: EventInstance,

@@ -10,6 +10,7 @@ from typing import Union
 from PyQt5.QtCore import pyqtSignal, Qt, QRect
 from PyQt5.QtGui import QIcon, QPainter, QPen, QFont, QResizeEvent
 from PyQt5.QtWidgets import QWidget, QMenu, QAction, QGraphicsDropShadowEffect, QLabel, QVBoxLayout
+from requests import RequestException
 
 from helpers.rrule_helper import get_recurrence_text
 from helpers.tools import ImageTools, PathManager, SignalingThread
@@ -46,6 +47,8 @@ class CalendarEventWidget(Widget):
                     QIcon(path).pixmap(size, size))
             return CalendarEventWidget.__ICONS__[path][size]
         except ValueError:
+            return fallback
+        except RequestException:
             return fallback
 
     def __init__(self, parent, event: Union[Event, EventInstance], begin, end):
@@ -234,6 +237,7 @@ class CalendarEventWidget(Widget):
         recurrence = f"<tr><td>{self.get_icon_base_64(PathManager.get_icon_path('recurring.png'), 10, '<b>Recurrence:</b>')} " \
                      f"</td><td>{get_recurrence_text(self.root_event().recurrence)}</td></tr>" if self.root_event().recurrence else ''
         weather = ''
+        non_sync = '' if self.root_event().is_synchronized() else '<br><br><p style="color:red">DESYNCRONIZED!</p><br><br>'
 
         try:
             if hasattr(self.parent().parent(), 'weather_data') and self.parent().parent().weather_data:
@@ -272,6 +276,7 @@ class CalendarEventWidget(Widget):
                         f'{recurrence}' \
                         f'{alarm_str}' \
                         f'{weather}' \
+                        f'{non_sync}' \
                         f'<tr></tr></table>' \
                         f"{self.get_icon_base_64(PathManager.get_icon_path('cal.png'), 10, '<i>Calendar:</i>')}" \
                         f" <i>{self.event_instance().calendar.name}</i>" \
