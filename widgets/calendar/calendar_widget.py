@@ -12,7 +12,6 @@ from plugins.base import BasePlugin
 from plugins.calendarplugin.caldav.cal_dav import CalDavPlugin
 from plugins.calendarplugin.calendar_plugin import CalendarPlugin
 from plugins.calendarplugin.data_model import Calendar, Event, EventInstance, CalendarData
-from plugins.calendarplugin.web_cal.web_cal import WebCalPlugin
 from plugins.climacell.climacell import ClimacellPlugin
 from plugins.location.location_plugin import LocationPlugin
 from plugins.location.mapquest_location_plugin import MapQuestLocationPlugin
@@ -281,11 +280,9 @@ class CalendarWidget(BaseWidget):
         self.pick_location_action.triggered.connect(lambda: self.pick_location())
 
         self.register_plugin(CalendarWidget.DEFAULT_PLUGINS[CalendarPlugin], 'cal_plugin')
-        self.register_plugin(WebCalPlugin, 'web_cal_plugin')
         self.register_plugin(CalendarWidget.DEFAULT_PLUGINS[WeatherPlugin], 'weather_plugin')
         self.register_plugin(CalendarWidget.DEFAULT_PLUGINS[LocationPlugin], 'location_plugin')
         self.cal_plugins[self.cal_plugin.__class__.__name__] = self.cal_plugin
-        self.cal_plugins[self.web_cal_plugin.__class__.__name__] = self.web_cal_plugin
 
         for plugin in self.cal_plugins.values():
             plugin.signal_delete.connect(self.view.remove_event)

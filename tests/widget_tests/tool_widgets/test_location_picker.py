@@ -1,12 +1,11 @@
 import json
+import random
 import unittest
 
-import numpy as np
 from PyQt5.QtCore import Qt
 from PyQt5.QtTest import QTest
 from PyQt5.QtWidgets import QMainWindow
 
-from credentials import MapQuestCredentials
 from tests.widget_tests import base
 from widgets.tool_widgets import LocationPicker
 from widgets.tool_widgets.location_picker import LocWebPage
@@ -20,8 +19,8 @@ class TestLocationPicker(unittest.TestCase):
         return {
             'loc':
                     {
-                        'lat': (np.random.rand()*180.0)-90.0,
-                        'long':  (np.random.rand()*360.0)-180.0
+                        'lat': (random.random()*180.0)-90.0,
+                        'long':  (random.random()*360.0)-180.0
                     }
                 }
 
@@ -29,6 +28,7 @@ class TestLocationPicker(unittest.TestCase):
         print('SET UP LOCATION PICKER')
         self.main = QMainWindow()
         self.location = self.get_random_loc()['loc']
+        print(f'default loc set to {self.location}')
         # noinspection PyTypeChecker
         self.loc = LocationPicker(self.main, service_name='MapQuest',
                                   api_key='', #MapQuestCredentials.get_api_key(),
@@ -51,10 +51,11 @@ class TestLocationPicker(unittest.TestCase):
         self.assertEqual(self.emitted_loc, self.location, 'default location is emitted after submit-button-click')
         self.loc.show()
         inj = self.get_random_loc()
+        print(f'injecting {inj["loc"]}')
         escaped_inj_str = json.dumps(inj).replace('"', '\\"')
         inj_js = f'console.log("{LocWebPage.UPDATE_PREFIX}{escaped_inj_str}")'
         self.loc.page.runJavaScript(inj_js)
-        base._processPendingEvents(self.app, timeout=2.0)
+        base._processPendingEvents(self.app, timeout=1.0)
         QTest.mouseClick(self.loc.accept_button, Qt.LeftButton)
         self.assertEqual(self.emitted_loc, inj['loc'], 'injected location is emitted after submit-button-click')
 
