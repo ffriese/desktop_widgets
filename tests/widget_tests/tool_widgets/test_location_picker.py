@@ -57,5 +57,6 @@ class TestLocationPicker(unittest.TestCase):
         self.loc.page.runJavaScript(inj_js)
         base._processPendingEvents(self.app, timeout=1.0)
         QTest.mouseClick(self.loc.accept_button, Qt.LeftButton)
+        base._processPendingEvents(self.app, timeout=1.0)
         self.assertEqual(self.emitted_loc, inj['loc'], 'injected location is emitted after submit-button-click')
 
