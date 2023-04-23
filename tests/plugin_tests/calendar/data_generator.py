@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from PyQt5.QtGui import QColor
 
-from plugins.calendarplugin.calendar_plugin import Event, Calendar, CalendarAccessRole
+from plugins.calendarplugin.data_model import CalendarAccessRole, Calendar, Event
 
 
 class CalendarPluginDataGenerator:
@@ -11,14 +11,14 @@ class CalendarPluginDataGenerator:
     @staticmethod
     def generate_event(**kwargs) -> Event:
         start = kwargs.get('start', datetime.now())
-        return Event(title='bla',
-                     event_id=str(uuid.uuid4()),
+        return Event(title=kwargs.get('title', 'bla'),
+                     event_id=kwargs.get('id', str(uuid.uuid4())),
                      start=start,
                      end=kwargs.get('end', start + timedelta(hours=2)),
-                     location='Here',
-                     description='this and that',
-                     all_day=False,
-                     calendar=CalendarPluginDataGenerator.generate_calendar(),
+                     location=kwargs.get('location', 'Here'),
+                     description=kwargs.get('description', 'this and that'),
+                     all_day=kwargs.get('all_day', False),
+                     calendar=kwargs.get('calendar', CalendarPluginDataGenerator.generate_calendar()),
                      data={}
                      )
 
