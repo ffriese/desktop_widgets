@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from enum import Enum
 from typing import List, Dict
 
@@ -21,6 +22,7 @@ class EmojiHelper:
     _emoji_short_names: Dict[str, EmojiChar] = {}
     _sheets_: {str: QPixmap} = {}
     selected_variant = Variant.GOOGLE
+    _regex = None
 
     @classmethod
     def get_source_pixmap(cls, icon_size: int, variant: Variant = None) -> QPixmap:
@@ -59,6 +61,18 @@ class EmojiHelper:
             cls.initialize()
 
         return cls._emoji_data
+
+    # ################################################### #
+    # Adapted from emoji_data_python                      #
+    #######################################################
+    @classmethod
+    def get_emoji_regex(cls):
+        if cls._regex is None:
+            # Sort emojis by length to make sure multi-character emojis are
+            # matched first
+            emojis = sorted([emoji.char for emoji in cls._emoji_data], key=len, reverse=True)
+            cls._regex = re.compile("(" + "|".join(re.escape(u) for u in emojis) + ")")
+        return cls._regex
 
     # ################################################### #
     # Adapted from emoji_data_python                      #

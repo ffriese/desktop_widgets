@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import QWidget, QFormLayout, QLineEdit, QPushButton, QHBoxL
 
 from helpers import styles
 from helpers.tools import PathManager
-from plugins.calendarplugin.calendar_plugin import Event, Calendar, CalendarAccessRole, EventInstance
+from plugins.calendarplugin.data_model import CalendarAccessRole, Calendar, Event, EventInstance
 from widgets.base import BaseWidget
 from widgets.tool_widgets import FilteringComboBox, EmojiPicker
 from widgets.tool_widgets.dialogs.custom_dialog import CustomWindow
@@ -129,7 +129,6 @@ class EventEditor(CustomWindow):
 
         self.recurring_widget = RecurrenceSelector()
 
-
         ###
         #   EVENT DESCRIPTION
         ###
@@ -215,7 +214,6 @@ class EventEditor(CustomWindow):
         elif isinstance(self.event, EventInstance):
             return self.event.instance
 
-
     def set_event(self, event: Union[Event, EventInstance]):
         self.setWindowTitle('Edit Event')
 
@@ -225,6 +223,7 @@ class EventEditor(CustomWindow):
             rec_id = self.event_instance().recurring_event_id
             print('recurring single instance, lock recurring settings')
             self.recurring.setEnabled(False)
+            self.calendar.setEnabled(False)  # cannot shift single instance of series out of calendar
         else:
             if self.root_event().recurrence is not None:
                 self.recurring.setChecked(True)
@@ -344,7 +343,6 @@ class EventEditor(CustomWindow):
         event.calendar = self.calendar_from_name(calendar_name=self.calendar.currentText())
         event.bg_color = self.get_bg_color()
         event.recurrence = self.get_recurrence()
-
 
     def get_recurrence(self):
         if self.recurring.isChecked():

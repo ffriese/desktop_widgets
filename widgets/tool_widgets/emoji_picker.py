@@ -5,7 +5,6 @@ from datetime import datetime
 from functools import partial
 from typing import Union, List
 
-import emoji
 from PyQt5.QtCore import pyqtSignal, Qt, QSize
 from PyQt5.QtGui import QIcon, QFont
 from PyQt5.QtWidgets import QHBoxLayout, QTabWidget, QLabel, QListWidget, QListWidgetItem, QButtonGroup, \
@@ -136,9 +135,9 @@ class EmojiPicker(CustomWindow):
     def split_summary(summary: str) -> (Union[str, None], str):
         if summary is None:
             return None, None
-        emojis = re.findall(r'^:.*?:', emoji.demojize(summary))
+        emojis = EmojiHelper.get_emoji_regex().match(summary)
         if emojis:
-            found_emoji = emoji.emojize(emojis[0])
+            found_emoji = emojis.groups(0)[0]
             return found_emoji, summary.replace(found_emoji, '', 1)
         else:
             return None, summary

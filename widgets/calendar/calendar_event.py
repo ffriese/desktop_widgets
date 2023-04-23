@@ -14,7 +14,7 @@ from requests import RequestException
 
 from helpers.rrule_helper import get_recurrence_text
 from helpers.tools import ImageTools, PathManager, SignalingThread
-from plugins.calendarplugin.calendar_plugin import Event, CalendarAccessRole, EventInstance
+from plugins.calendarplugin.data_model import CalendarAccessRole, Event, EventInstance
 from plugins.weather.iconsets import IconSet
 from plugins.weather.weather_data_types import Temperature, WeatherDescription, Wind
 from plugins.weather.weather_plugin import WeatherReport

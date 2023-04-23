@@ -3,15 +3,16 @@ import copy
 import logging
 import math
 from datetime import datetime, date, timedelta
-from typing import Union, List
+from typing import Union, List, Dict
 
 from dateutil.tz import tzlocal
 
 from credentials import NoCredentialsSetException
 from plugins.base import BasePlugin
 from plugins.calendarplugin.caldav.cal_dav import CalDavPlugin
-from plugins.calendarplugin.calendar_plugin import CalendarPlugin, Event, CalendarData, Calendar, EventInstance
-# from plugins.calendarplugin.web_cal.web_cal import WebCalPlugin
+from plugins.calendarplugin.calendar_plugin import CalendarPlugin
+from plugins.calendarplugin.data_model import Calendar, Event, EventInstance, CalendarData
+from plugins.calendarplugin.web_cal.web_cal import WebCalPlugin
 from plugins.climacell.climacell import ClimacellPlugin
 from plugins.location.location_plugin import LocationPlugin
 from plugins.location.mapquest_location_plugin import MapQuestLocationPlugin
@@ -60,6 +61,7 @@ class CalendarWidget(BaseWidget):
 
         self.cal_plugins = {}  # type: Dict[str, Union[None, CalendarPlugin]]
         self.cal_plugin = None  # type:  Union[None, CalendarPlugin]
+        self.calendar_plugin_lookup: Dict[str, CalendarPlugin] = {}
         self.weather_plugin = None  # type: Union[None, WeatherPlugin]
         self.location_plugin = None  # type: Union[None, LocationPlugin]
         self.updating_calendars = False
@@ -279,11 +281,16 @@ class CalendarWidget(BaseWidget):
         self.pick_location_action.triggered.connect(lambda: self.pick_location())
 
         self.register_plugin(CalendarWidget.DEFAULT_PLUGINS[CalendarPlugin], 'cal_plugin')
-        # self.register_plugin(WebCalPlugin, 'web_cal_plugin')
+        self.register_plugin(WebCalPlugin, 'web_cal_plugin')
         self.register_plugin(CalendarWidget.DEFAULT_PLUGINS[WeatherPlugin], 'weather_plugin')
         self.register_plugin(CalendarWidget.DEFAULT_PLUGINS[LocationPlugin], 'location_plugin')
         self.cal_plugins[self.cal_plugin.__class__.__name__] = self.cal_plugin
-        # self.cal_plugins[self.web_cal_plugin.__class__.__name__] = self.web_cal_plugin
+        self.cal_plugins[self.web_cal_plugin.__class__.__name__] = self.web_cal_plugin
+
+        for plugin in self.cal_plugins.values():
+            plugin.signal_delete.connect(self.view.remove_event)
+            plugin.single_event_changed.connect(self.display_new_event)
+
         if self.location:
             self.weather_plugin.set_location(self.location)
         self.view.refresh(self.days, self.start_date, self.start_hour, self.end_hour)
@@ -296,81 +303,86 @@ class CalendarWidget(BaseWidget):
         # self.try_to_apply_cache()
 
     def try_to_apply_cache(self):
-        try:
-            self.log_info('got myself some data-cache:', self.__data__['event_cache'])
-            created = list(self.event_cache['create'])
-            for new_event in created:
-                self.log_info('new event: ', new_event.data)
-                ne = copy.deepcopy(new_event)
-                temp_id = ne.data.pop('id')
-                ne.data.pop('synchronized')
-                ne.id = None
-                synced = self.cal_plugin.create_event(ne,
-                                                      days_in_future=self.get_display_days_in_future(),
-                                                      days_in_past=self.get_display_days_in_past())
-                if (isinstance(synced, list) and synced[0].instance.is_synchronized()) or \
-                        (isinstance(synced, Event) and synced.is_synchronized()):
-                    self.event_cache['create'].remove(new_event)
-                    self.log_info('successfully created ', synced.data)
-                    self.display_new_event(synced)
-                    if temp_id in self.event_cache['update'].keys():
+        for plugin in self.cal_plugins.values():
+            plugin.apply_offline_cache(days_in_future=self.get_display_days_in_future(),
+                                       days_in_past=self.get_display_days_in_past())
 
-                        self.log_info(f"moving {temp_id} to {synced.id}")
-                        updts = self.event_cache['update'].pop('temp_id')
-                        self.event_cache['update'][synced.id] = updts
-                    else:
-                        self.log_info(f"{temp_id} not found in update cache")
-                else:
-                    self.log_info('could not create. kept in cache', new_event)
-                    self.display_new_event(new_event)
-                    continue
-
-            for update_id in list(self.event_cache['update'].keys()):
-                if update_id.startswith("non-sync"):
-                    if update_id in self.event_cache['create']:
-                        self.log_warn(f'updates for {update_id} are ignored as the main event is not synced')
-                        continue
-                    else:
-                        self.log_error(
-                            f"{update_id} is a non-synced event without creation this should not have happend. removing...")
-                        self.event_cache['update'].pop(update_id)
-                        continue
-                updated = self.event_cache['update'][update_id]
-                last_change = updated[-1]
-                upd_event = last_change['new_data']
-                ne = copy.deepcopy(upd_event)
-                ne.data.pop('synchronized')
-                moved_from = None if updated[0]['old_calendar'].id == upd_event.calendar.id else updated[0][
-                    'old_calendar']
-                synced = self.cal_plugin.update_event(ne,
-                                                      days_in_future=self.get_display_days_in_future(),
-                                                      days_in_past=self.get_display_days_in_past(),
-                                                      moved_from_calendar=moved_from)
-
-                if (isinstance(synced, list) and synced[0].instance.is_synchronized()) or \
-                        (isinstance(synced, Event) and synced.is_synchronized()):
-                    self.event_cache['update'].pop(update_id)
-                    self.log_info('successfully updated ', upd_event.data)
-                    self.display_new_event(synced)
-                else:
-                    self.log_info('could not update. kept in cache', upd_event)
-                    self.display_new_event(upd_event)
-
-            for deleted in list(self.event_cache['delete']):
-                self.log_info('DELETED EVENT: ', deleted.data)
-
-                if self.cal_plugin.delete_event(deleted):
-                    self.log_info('successfully deleted')
-                    self.event_cache['delete'].remove(deleted)
-                    self.view.remove_event(deleted.id)
-                else:
-                    self.log_info('could not delete. kept in cache', deleted.data)
-                    self.view.remove_event(deleted.id)
-            self.__data__['event_cache'] = self.event_cache
-            self._save_data()
-            self.log_info('got myself some cache:', self.event_cache)
-        except KeyError as e:
-            self.log_warn('no event cache yet. might get initialized in the future...', e)
+    # def old_try_to_apply_cache(self):
+    #     try:
+    #         self.log_info('got myself some data-cache:', self.__data__['event_cache'])
+    #         created = list(self.event_cache['create'])
+    #         for new_event in created:
+    #             self.log_info('new event: ', new_event.data)
+    #             ne = copy.deepcopy(new_event)
+    #             temp_id = ne.data.pop('id')
+    #             ne.data.pop('synchronized')
+    #             ne.id = None
+    #             synced = self.cal_plugin.create_event(ne,
+    #                                                   days_in_future=self.get_display_days_in_future(),
+    #                                                   days_in_past=self.get_display_days_in_past())
+    #             if (isinstance(synced, list) and synced[0].instance.is_synchronized()) or \
+    #                     (isinstance(synced, Event) and synced.is_synchronized()):
+    #                 self.event_cache['create'].remove(new_event)
+    #                 self.log_info('successfully created ', synced.data)
+    #                 self.display_new_event(synced)
+    #                 if temp_id in self.event_cache['update'].keys():
+    #
+    #                     self.log_info(f"moving {temp_id} to {synced.id}")
+    #                     updts = self.event_cache['update'].pop('temp_id')
+    #                     self.event_cache['update'][synced.id] = updts
+    #                 else:
+    #                     self.log_info(f"{temp_id} not found in update cache")
+    #             else:
+    #                 self.log_info('could not create. kept in cache', new_event)
+    #                 self.display_new_event(new_event)
+    #                 continue
+    #
+    #         for update_id in list(self.event_cache['update'].keys()):
+    #             if update_id.startswith("non-sync"):
+    #                 if update_id in self.event_cache['create']:
+    #                     self.log_warn(f'updates for {update_id} are ignored as the main event is not synced')
+    #                     continue
+    #                 else:
+    #                     self.log_error(
+    #                         f"{update_id} is a non-synced event without creation this should not have happend. removing...")
+    #                     self.event_cache['update'].pop(update_id)
+    #                     continue
+    #             updated = self.event_cache['update'][update_id]
+    #             last_change = updated[-1]
+    #             upd_event = last_change['new_data']
+    #             ne = copy.deepcopy(upd_event)
+    #             ne.data.pop('synchronized')
+    #             moved_from = None if updated[0]['old_calendar'].id == upd_event.calendar.id else updated[0][
+    #                 'old_calendar']
+    #             synced = self.cal_plugin.update_event(ne,
+    #                                                   days_in_future=self.get_display_days_in_future(),
+    #                                                   days_in_past=self.get_display_days_in_past(),
+    #                                                   moved_from_calendar=moved_from)
+    #
+    #             if (isinstance(synced, list) and synced[0].instance.is_synchronized()) or \
+    #                     (isinstance(synced, Event) and synced.is_synchronized()):
+    #                 self.event_cache['update'].pop(update_id)
+    #                 self.log_info('successfully updated ', upd_event.data)
+    #                 self.display_new_event(synced)
+    #             else:
+    #                 self.log_info('could not update. kept in cache', upd_event)
+    #                 self.display_new_event(upd_event)
+    #
+    #         for deleted in list(self.event_cache['delete']):
+    #             self.log_info('DELETED EVENT: ', deleted.data)
+    #
+    #             if self.cal_plugin.delete_event(deleted):
+    #                 self.log_info('successfully deleted')
+    #                 self.event_cache['delete'].remove(deleted)
+    #                 self.view.remove_event(deleted.id)
+    #             else:
+    #                 self.log_info('could not delete. kept in cache', deleted.data)
+    #                 self.view.remove_event(deleted.id)
+    #         self.__data__['event_cache'] = self.event_cache
+    #         self._save_data()
+    #         self.log_info('got myself some cache:', self.event_cache)
+    #     except KeyError as e:
+    #         self.log_warn('no event cache yet. might get initialized in the future...', e)
 
     def update_calendar_filter(self, calendars):
         self.calendar_filter = []
@@ -415,7 +427,9 @@ class CalendarWidget(BaseWidget):
             self.update_weather()
         if isinstance(plugin, CalendarPlugin):
             if data is not None:
-                self.calendar_data[plugin.__class__.__name__] = data
+                self.calendar_data[plugin.__class__.__name__] : CalendarData = data
+                for calendar in self.calendar_data[plugin.__class__.__name__].calendars.values():
+                    self.calendar_plugin_lookup[calendar.id] = plugin
             self.update_view()
             self.try_to_apply_cache()
             self.check_notifications()
@@ -461,41 +475,6 @@ class CalendarWidget(BaseWidget):
         self.mouse_down_loc = None
         self.mouse_cur_loc = None
 
-    def create_new_event(self, start=None, end=None, plugin=None):
-        if plugin is None:
-            plugin = self.cal_plugin
-        plugin_name = plugin.__class__.__name__
-
-        def handle_new_event(event: Event):
-            self._clear_rect()
-            new_event = self.cal_plugin.create_event(event,
-                                                     days_in_future=self.get_display_days_in_future(),
-                                                     days_in_past=self.get_display_days_in_past()
-                                                     )
-            if (isinstance(new_event, list) and new_event[0].instance.is_synchronized()) or \
-                    (isinstance(new_event, Event) and new_event.is_synchronized()):
-                print('hello', new_event)
-                self.display_new_event(new_event)
-                pass
-            else:
-                self.log_warn('EVENT CREATION FAILED! TODO: CACHE NEW EVENTS UNTIL CONNECTION IS RE-ESTABLISHED!!')
-                self.display_new_event(event)
-                self.event_cache['create'].append(event)
-                CalendarWidget.__EVENT_CACHE__ = self.event_cache
-                self.__data__['event_cache'] = self.event_cache
-                self._save_data()
-                return
-
-        if self.calendar_data is not None:
-            self.event_editor = self.create_event_editor()
-            self.event_editor.setWindowTitle('Create New Event')
-            self.event_editor.setWindowIcon(QIcon(PathManager.get_icon_path('new_event.png')))
-            self.event_editor.accepted.connect(handle_new_event)
-            self.event_editor.closed.connect(self._clear_rect)
-            if type(start) is datetime and type(end) is datetime:
-                self.event_editor.set_time(start, end)
-            self.event_editor.show()
-
     def display_new_event(self, event: Union[Event, List[EventInstance]]):
         if isinstance(event, Event):
             self.view.add_events({event.id: event})
@@ -503,10 +482,44 @@ class CalendarWidget(BaseWidget):
             if event:  # can be emtpy list if no occurrence in displayed time-frame
                 self.view.add_events({event[0].root_event.id: event})
 
-    def delete_event(self, requesting_widget: CalendarEventWidget, plugin=None):
-        if plugin is None:
-            plugin = self.cal_plugin
-        plugin_name = plugin.__class__.__name__
+    def handle_new_event(self, event: Event):
+        plugin = self.calendar_plugin_lookup.get(event.calendar.id, self.cal_plugin)
+        self._clear_rect()
+        new_event = plugin.create_event(event,
+                                        days_in_future=self.get_display_days_in_future(),
+                                        days_in_past=self.get_display_days_in_past()
+                                        )
+        # if (isinstance(new_event, list) and new_event[0].instance.is_synchronized()) or \
+        #         (isinstance(new_event, Event) and new_event.is_synchronized()):
+        #     print('hello', new_event)
+        #     self.display_new_event(new_event)
+        #     pass
+        # else:
+        #     self.log_warn('EVENT CREATION FAILED! TODO: CACHE NEW EVENTS UNTIL CONNECTION IS RE-ESTABLISHED!!')
+        #     self.display_new_event(event)
+        #     self.event_cache['create'].append(event)
+        #     CalendarWidget.__EVENT_CACHE__ = self.event_cache
+        #     self.__data__['event_cache'] = self.event_cache
+        #     self._save_data()
+        #     return
+        self.display_new_event(new_event)
+
+    def create_new_event(self, start=None, end=None):
+
+
+        if self.calendar_data is not None:
+            self.event_editor = self.create_event_editor()
+            self.event_editor.setWindowTitle('Create New Event')
+            self.event_editor.setWindowIcon(QIcon(PathManager.get_icon_path('new_event.png')))
+            self.event_editor.accepted.connect(self.handle_new_event)
+            self.event_editor.closed.connect(self._clear_rect)
+            if type(start) is datetime and type(end) is datetime:
+                self.event_editor.set_time(start, end)
+            self.event_editor.show()
+
+    def delete_event(self, requesting_widget: CalendarEventWidget):
+        plugin = self.calendar_plugin_lookup.get(requesting_widget.root_event().calendar.id, self.cal_plugin)
+        event = requesting_widget.root_event()
         if requesting_widget.root_event().recurrence:
             header = '"%s" is a recurring Event.' % requesting_widget.root_event().title
             mb = CustomMessageBox(QMessageBox.Question, header, f"Do you want to delete all instances of "
@@ -525,9 +538,9 @@ class CalendarWidget(BaseWidget):
                 mb.move(self.mapToGlobal(requesting_widget.pos()))
                 reply = mb.exec()
                 if reply == QMessageBox.Yes:
-                    new_events = self.cal_plugin.delete_event_instance(requesting_widget.event,
-                                                                       days_in_future=self.get_display_days_in_future(),
-                                                                       days_in_past=self.get_display_days_in_past())
+                    new_events = plugin.delete_event_instance(requesting_widget.event,
+                                                              days_in_future=self.get_display_days_in_future(),
+                                                              days_in_past=self.get_display_days_in_past())
                     if requesting_widget:
                         requesting_widget.delete_signal.emit(requesting_widget.root_event().id, None)
                     self.display_new_event(new_events)
@@ -543,28 +556,65 @@ class CalendarWidget(BaseWidget):
         reply = mb.exec()
         if reply == QMessageBox.Yes:
             self.log_info('TRYING TO DELETE:', requesting_widget.root_event().__dict__)
-            if not requesting_widget.root_event().is_synchronized():
-                self.log_warn('trying to delete un-synchronized event')
+            if plugin.delete_event(event):
                 requesting_widget.delete_signal.emit(requesting_widget.root_event().id, None)
-                self.event_cache['create'].remove(requesting_widget.root_event())
-                self.__data__['event_cache'] = self.event_cache
-                self._save_data()
+                # todo: check if needed
+                self.calendar_data[plugin.__class__.__name__].events.pop(requesting_widget.root_event().id, None)
+
+            # if not requesting_widget.root_event().is_synchronized():
+            #     self.log_warn('trying to delete un-synchronized event')
+            #     requesting_widget.delete_signal.emit(requesting_widget.root_event().id, None)
+            #     self.event_cache['create'].remove(requesting_widget.root_event())
+            #     self.__data__['event_cache'] = self.event_cache
+            #     self._save_data()
+            #     requesting_widget.log_debug(self.event_cache)
+            # else:
+            #     self.log_warn('trying to delete synchronized event')
+            #     if self.cal_plugin.delete_event(requesting_widget.root_event()):
+            #         requesting_widget.delete_signal.emit(requesting_widget.root_event().id, None)
+            #         self.calendar_data[plugin_name].events.pop(requesting_widget.root_event().id, None)
+            #         # self.widget_updated.emit('calendar_data', self.calendar_data)
+            #         # self.__data__['calendar_data'][plugin_name] = self.calendar_data[plugin_name]
+            #         # self._save_data()
+            #     else:
+            #         self.log_warn('deletion failed. saving in cache')
+            #         self.event_cache['delete'].append(requesting_widget.root_event())
+            #         self.__data__['event_cache'] = self.event_cache
+            #         self._save_data()
+            #         requesting_widget.log_debug(self.event_cache)
+            #         requesting_widget.delete_signal.emit(requesting_widget.root_event().id, None)
+
+    def make_update_to_event(self, event: Event, old_calendar: Union[None, Calendar],
+                             requesting_widget: CalendarEventWidget):
+
+        plugin = self.calendar_plugin_lookup.get(requesting_widget.root_event().calendar.id, self.cal_plugin)
+        updated_event = plugin.update_event(event,
+                                            days_in_future=self.get_display_days_in_future(),
+                                            days_in_past=self.get_display_days_in_past(),
+                                            moved_from_calendar=old_calendar if
+                                            event.calendar.id != old_calendar.id else None)
+
+        # if (isinstance(updated_event, list) and updated_event[0].instance.is_synchronized()) or \
+        #         (isinstance(updated_event, Event) and updated_event.is_synchronized()):
+        #     pass
+        # else:
+        #     self.log_warn('trying to update non-synchronized event ', updated_event.__dict__)
+        #     up_cache = self.event_cache['update']
+        #     if updated_event.id not in up_cache.keys():
+        #         up_cache[updated_event.id] = []
+        #     cached_edits = up_cache[updated_event.id]
+        #     cached_edits.append({'new_data': updated_event, 'old_calendar': old_calendar})
+        #     self.__data__['event_cache'] = self.event_cache
+        #     self._save_data()
+        if requesting_widget:
+            try:
                 requesting_widget.log_debug(self.event_cache)
-            else:
-                self.log_warn('trying to delete synchronized event')
-                if self.cal_plugin.delete_event(requesting_widget.root_event()):
-                    requesting_widget.delete_signal.emit(requesting_widget.root_event().id, None)
-                    self.calendar_data[plugin_name].events.pop(requesting_widget.root_event().id, None)
-                    # self.widget_updated.emit('calendar_data', self.calendar_data)
-                    # self.__data__['calendar_data'][plugin_name] = self.calendar_data[plugin_name]
-                    # self._save_data()
-                else:
-                    self.log_warn('deletion failed. saving in cache')
-                    self.event_cache['delete'].append(requesting_widget.root_event())
-                    self.__data__['event_cache'] = self.event_cache
-                    self._save_data()
-                    requesting_widget.log_debug(self.event_cache)
-                    requesting_widget.delete_signal.emit(requesting_widget.root_event().id, None)
+                requesting_widget.delete_signal.emit(requesting_widget.root_event().id, updated_event)
+            except RuntimeError as e:
+                self.log_error(f'CRITICAL ERROR: {e}')
+
+        else:
+            self.log_warn('THE REQUESTING WIDGET HAS BEEN DELETED. THIS SHOULD NEVER HAVE HAPPENED')
 
     def all_instance_check(self, requesting_widget: CalendarEventWidget):
         edit_msg = 'Do you want to edit all instances?'
@@ -575,37 +625,6 @@ class CalendarWidget(BaseWidget):
         mb.move(self.mapToGlobal(requesting_widget.pos()))
         reply = mb.exec()
         return reply
-
-    def make_update_to_event(self, event: Event, old_calendar: Union[None, Calendar],
-                             requesting_widget: CalendarEventWidget):
-
-        updated_event = self.cal_plugin.update_event(event,
-                                                     days_in_future=self.get_display_days_in_future(),
-                                                     days_in_past=self.get_display_days_in_past(),
-                                                     moved_from_calendar=old_calendar if
-                                                     event.calendar.id != old_calendar.id else None)
-
-        if (isinstance(updated_event, list) and updated_event[0].instance.is_synchronized()) or \
-                (isinstance(updated_event, Event) and updated_event.is_synchronized()):
-            pass
-        else:
-            self.log_warn('trying to update non-synchronized event ', updated_event.__dict__)
-            up_cache = self.event_cache['update']
-            if updated_event.id not in up_cache.keys():
-                up_cache[updated_event.id] = []
-            cached_edits = up_cache[updated_event.id]
-            cached_edits.append({'new_data': updated_event, 'old_calendar': old_calendar})
-            self.__data__['event_cache'] = self.event_cache
-            self._save_data()
-        if requesting_widget:
-            try:
-                requesting_widget.log_debug(self.event_cache)
-                requesting_widget.delete_signal.emit(requesting_widget.root_event().id, updated_event)
-            except RuntimeError as e:
-                self.log_error(f'CRITICAL ERROR: {e}')
-
-        else:
-            self.log_warn('THE REQUESTING WIDGET HAS BEEN DELETED. THIS SHOULD NEVER HAVE HAPPENED')
 
     def show_event_editor(self, requesting_widget: CalendarEventWidget):
         if requesting_widget.recurring:

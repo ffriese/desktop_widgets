@@ -4,7 +4,7 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QResizeEvent
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QApplication
 
-from plugins.calendarplugin.calendar_plugin import Event, EventInstance
+from plugins.calendarplugin.data_model import Event, EventInstance
 from widgets.calendar.calendar_event import CalendarEventWidget
 from widgets.calendar.timeline_widget import TimelineWidget
 from helpers.widget_helpers import CalendarHelper
@@ -93,10 +93,27 @@ class DayWidget(TimelineWidget):
         self.event_time_change_request.emit(self.sender(), new_start, new_end)
 
     def _event_got_moved(self, event_widget: CalendarEventWidget, new_pos):
-
-        new_pos.setX(event_widget.x())
-        new_pos.setY(min(max(new_pos.y(), 0), self.height() - 5))
-        event_widget.move(new_pos)
+        # noinspection PyPep8Naming
+        ALLOW_EXPERIMENTAL_MOVE_THROUGH_DAYS = False
+        if ALLOW_EXPERIMENTAL_MOVE_THROUGH_DAYS and event_widget.begin == 0:
+            prev_event_section = self.parent().get_previous_event_section(self, event_widget)
+            # print(f'prev event section: {prev_event_section}')
+            y_offset = min(max(new_pos.y()-event_widget.y(), -event_widget.height()), prev_event_section.height())
+            event_widget.setGeometry(event_widget.x(),
+                                     min(max(new_pos.y()-prev_event_section.height(), 0), self.height() - 5),
+                                     event_widget.width(),
+                                     min(event_widget.height() + y_offset,
+                                         event_widget.height()+prev_event_section.height(),
+                                         self.height()-5))
+            prev_event_section.setGeometry(prev_event_section.x(),
+                                           min(max(prev_event_section.y()+y_offset, 0), self.height()-5),
+                                           prev_event_section.width(),
+                                           min(max(prev_event_section.height()-y_offset, 0), self.height()-5)
+                                           )
+        else:
+            new_pos.setX(event_widget.x())
+            new_pos.setY(min(max(new_pos.y(), 0), self.height() - 5))
+            event_widget.move(new_pos)
 
     def _event_got_moved_end(self, event_widget: CalendarEventWidget, new_pos):
         new_start = ((new_pos.y() / self.height()) * self.hours_displayed()) + self.start_hour

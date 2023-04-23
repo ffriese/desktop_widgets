@@ -5,7 +5,7 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QResizeEvent
 from PyQt5.QtWidgets import QApplication
 
-from plugins.calendarplugin.calendar_plugin import Event, EventInstance
+from plugins.calendarplugin.data_model import Event, EventInstance
 from widgets.calendar.calendar_event import CalendarEventWidget
 from widgets.tool_widgets.widget import Widget
 
@@ -37,11 +37,21 @@ class TimelineWidget(Widget):
         if isinstance(event, EventInstance):
             cal_event.setVisible(event.instance.calendar.name not in self.calendar_filter)
             if event.root_event.id in self.cal_events and isinstance(self.cal_events[event.root_event.id], dict):
+                if event.instance_id in self.cal_events[event.root_event.id]:
+                    print('REMOVING ', event.root_event.id, event.instance_id)
+                    old = self.cal_events[event.root_event.id].pop(event.instance_id)
+                    old.hide()
+                    old.deleteLater()
                 self.cal_events[event.root_event.id][event.instance_id] = cal_event
             else:
                 self.cal_events[event.root_event.id] = {event.instance_id: cal_event}
         else:
             cal_event.setVisible(event.calendar.name not in self.calendar_filter)
+            if event.id in self.cal_events:
+                print('REMOVING ', event.id)
+                old = self.cal_events.pop(event.id)
+                old.hide()
+                old.deleteLater()
             self.cal_events[event.id] = cal_event
         QApplication.sendEvent(self, QResizeEvent(self.size(), self.size()))
 

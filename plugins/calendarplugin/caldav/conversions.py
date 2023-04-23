@@ -16,7 +16,7 @@ from PyQt5.QtGui import QColor
 from dateutil import rrule
 from vobject.icalendar import RecurringComponent
 
-from plugins.calendarplugin.calendar_plugin import Event, Calendar, Alarm, CalendarAccessRole, Todo, EventInstance
+from plugins.calendarplugin.data_model import CalendarAccessRole, Alarm, Calendar, Event, EventInstance, Todo
 
 
 class MockVobjectInstance:
@@ -221,7 +221,7 @@ class CalDavConversions:
         return time_instances
 
     @classmethod
-    def expand_event(cls, event: Event, ical_event: icalendar.Event, start, end) -> List[EventInstance]:
+    def expand_event(cls, event: Event, ical_event: icalendar.Calendar, start, end) -> List[EventInstance]:
         return [EventInstance(root_event=event,
                               instance=cls.
                               event_from_recurring_component(

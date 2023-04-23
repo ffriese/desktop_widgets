@@ -1,6 +1,5 @@
 PyQt5
 PyQtWebEngine
-emoji
 termcolor
 qrainbowstyle==0.6.5
 python-dateutil

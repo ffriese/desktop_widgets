@@ -8,7 +8,7 @@ from PyQt5.QtCore import pyqtSignal, Qt, QRect
 from PyQt5.QtGui import QPaintEvent, QPainter, QFont, QPen, QColor
 from PyQt5.QtWidgets import QWidget, QHBoxLayout
 
-from plugins.calendarplugin.calendar_plugin import Event, EventInstance
+from plugins.calendarplugin.data_model import Event, EventInstance
 from widgets.calendar.calendar_event import CalendarEventWidget
 from widgets.calendar.timeline_widget import TimelineWidget
 from helpers.widget_helpers import CalendarHelper

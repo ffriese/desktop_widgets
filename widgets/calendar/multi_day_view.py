@@ -165,7 +165,8 @@ class MultiDayView(Widget):
             self.log_info(f'removed {found} widgets belonging to {event_id}')
         if new_event is not None:
             if isinstance(new_event, list):
-                self.add_events({new_event[0].root_event.id: new_event})
+                if new_event:
+                    self.add_events({new_event[0].root_event.id: new_event})
             else:
                 self.add_events({new_event.id: new_event})
 
@@ -316,7 +317,7 @@ class MultiDayView(Widget):
 
         painter.setRenderHint(QPainter.Antialiasing)
 
-        from plugins.weather.weather_data_types import  PrecipitationType
+        from plugins.weather.weather_data_types import PrecipitationType
         mylist = [p[1].data[Precipitation].get_type()['value'] for p in weather_report.get_merged_report().items() if
                   p[1].data[Precipitation].get_type()['value'] != PrecipitationType.FREEZING_RAIN]
 

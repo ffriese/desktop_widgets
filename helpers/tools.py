@@ -148,36 +148,40 @@ class PathManager:
 
     @staticmethod
     def get_project_base_path(filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__], filename)
+        return PathManager.join_path(filename=filename)
 
     @staticmethod
     def get_image_path(filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'images'], filename)
+        return PathManager.join_path('resources', 'images', filename=filename)
 
     @staticmethod
     def get_icon_path(filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'icons'], filename)
+        return PathManager.join_path('resources', 'icons', filename=filename)
 
     @staticmethod
     def get_emoji_path(filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'emojis'], filename)
+        return PathManager.join_path('resources', 'emojis', filename=filename)
 
     @staticmethod
     def get_calendar_default_icons_path(filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'default_calendar_icons'], filename)
+        return PathManager.join_path('resources', 'default_calendar_icons', filename=filename)
 
     @staticmethod
     def get_weather_icon_set_path(icon_set_name: str, filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'weather_icons', icon_set_name],
-                                         filename)
+        return PathManager.join_path('resources', 'weather_icons', icon_set_name,
+                                     filename=filename)
 
     @staticmethod
     def get_html_path(filename=None):
-        return PathManager._combine_path([PathManager.__BASE_PATH__, 'resources', 'html'], filename)
+        return PathManager.join_path('resources', 'html', filename=filename)
 
     @staticmethod
-    def join_path(*args):
-        return PathManager._combine_path([PathManager.__BASE_PATH__,  *args])
+    def get_storage_path(filename=None):
+        return PathManager.join_path('storage', filename=filename)
+
+    @staticmethod
+    def join_path(*args, filename=None):
+        return PathManager._combine_path([PathManager.__BASE_PATH__,  *args], filename=filename)
 
     @staticmethod
     def make_path(path: Union[str, Path]):

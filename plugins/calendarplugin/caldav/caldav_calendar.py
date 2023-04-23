@@ -6,7 +6,7 @@ from caldav import CalendarObjectResource
 from urllib3.exceptions import NewConnectionError
 
 from plugins.calendarplugin.caldav.conversions import CalDavConversions, CalDavObjectUpdate
-from plugins.calendarplugin.calendar_plugin import Event, Calendar, CalendarAccessRole
+from plugins.calendarplugin.data_model import CalendarAccessRole, Calendar, Event
 
 
 class CalDavCalendar:
